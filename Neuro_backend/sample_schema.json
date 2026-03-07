@@ -1,0 +1,19 @@
+{
+    "form_date": "YYYY-MM-DD or null",
+    "patient": {
+      "last_name": null,
+      "first_name": null,
+      "nir": null,
+      "birth_date": "YYYY-MM-DD or null"
+    },
+    "doctor": {
+      "full_name": null,
+      "rpps": null
+    },
+    "orthoptic_care": {
+      "description": null,
+      "acts_prescribed": []
+    },
+    "ocr_raw_text": null
+  }
+  

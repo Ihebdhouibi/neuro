@@ -1,0 +1,48 @@
+# ============================================
+# CLEANED REQUIREMENTS - PaddleOCR Only
+# ============================================
+
+# Core Web Framework
+fastapi==0.116.1
+uvicorn==0.35.0
+python-multipart==0.0.20
+python-dotenv==1.1.1
+pydantic==2.11.7
+starlette==0.47.2
+
+# CORS & HTTP
+httpx==0.28.1
+requests==2.32.4
+
+# Database (PostgreSQL)
+SQLAlchemy==2.0.43
+psycopg2-binary==2.9.9
+asyncpg==0.30.0
+alembic==1.14.0
+
+# OCR - PaddleOCR
+paddleocr==2.9.2
+paddlepaddle==3.1.0
+
+# Image Processing
+Pillow==11.3.0
+opencv-python==4.11.0.86
+numpy>=1.26.0
+
+# PDF Processing
+PyMuPDF==1.24.14
+pdf2image==1.17.0
+
+# OpenAI API (for extraction fallback)
+openai==1.88.0
+
+# Utilities
+loguru==0.7.3
+python-dateutil==2.9.0.post0
+click==8.2.1
+pydantic-settings==2.7.1
+
+# Development
+pytest==8.3.2
+pytest-asyncio==0.25.5
+httpx==0.28.1  # for testing
