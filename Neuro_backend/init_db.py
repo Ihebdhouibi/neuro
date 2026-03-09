@@ -4,15 +4,11 @@ Database initialization script
 Run this script to create database tables
 """
 import asyncio
-import sys
 import os
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-
-if sys.platform == 'win32':
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 async def main():
     """Initialize database tables"""

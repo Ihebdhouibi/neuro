@@ -13,12 +13,11 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:pyg201223@localh
 
 # Convert postgresql:// to postgresql+asyncpg:// for async support
 ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-
+ASYNC_DATABASE_URL = ASYNC_DATABASE_URL + "?ssl=disable"
 # Create async engine
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
     echo=False,  # Set to True for SQL query logging
-    connect_args={"ssl": False},
     pool_pre_ping=True,  # Verify connections before using them
     pool_size=10,  # Number of connections to maintain
     max_overflow=20  # Maximum number of connections to create beyond pool_size
