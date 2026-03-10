@@ -1,3 +1,8 @@
+import sys
+if sys.platform == 'win32':
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 """
 Database configuration and connection management
 """
@@ -84,4 +89,5 @@ async def close_db():
     """
     await async_engine.dispose()
     logger.info("🔄 Database connections closed")
+
 

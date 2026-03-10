@@ -3,7 +3,10 @@
 FSE OCR API - FastAPI Backend with PaddleOCR
 Simplified version for window capture screenshot processing
 """
-
+import sys
+if sys.platform == 'win32':
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 import os
 import io
 import tempfile
