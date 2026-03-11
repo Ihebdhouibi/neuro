@@ -16,7 +16,20 @@ async def create_document(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new document record"""
-    return await crud.create_document(db, document)
+    db_doc = await crud.create_document(db, document)
+    return schemas.DocumentResponse(
+        id=db_doc.id,
+        filename=db_doc.filename,
+        file_type=db_doc.file_type,
+        task_type=db_doc.task_type,
+        content=db_doc.content,
+        metadata=db_doc.doc_metadata,
+        output_path=db_doc.output_path,
+        status=db_doc.status,
+        error_message=db_doc.error_message,
+        created_at=db_doc.created_at,
+        updated_at=db_doc.updated_at,
+    )
 
 @router.get("/documents", response_model=List[schemas.DocumentResponse])
 async def get_documents(
@@ -228,4 +241,5 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             status_code=503,
             detail=f"Database connection failed: {str(e)}"
         )
+
 
