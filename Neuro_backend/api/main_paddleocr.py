@@ -3,10 +3,7 @@
 FSE OCR API - FastAPI Backend with PaddleOCR
 Simplified version for window capture screenshot processing
 """
-import sys
-if sys.platform == 'win32':
-    import asyncio
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import os
 import io
 import tempfile
@@ -16,7 +13,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(r"C:/Users/hp/Downloads/neuro/Neuro_backend/.env")
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
