@@ -34,11 +34,11 @@ _NOISE_EXACT = {
 }
 
 _NOISE_PATTERNS = [
-    re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'),  # IP addresses
-    re.compile(r'^[\u4e00-\u9fff\u2e80-\u2fd5]+$'),          # CJK-only
-    re.compile(r'^[+\-=|_]{1,3}$'),                           # Decorative
-    re.compile(r'^\d{2}:\d{2}$'),                             # Clock time
-    re.compile(r'^F\d$'),                                     # Function keys
+    re.compile(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'),
+    re.compile(r'^[\u4e00-\u9fff\u2e80-\u2fd5]+$'),
+    re.compile(r'^[+\-=|_]{1,3}$'),
+    re.compile(r'^\d{2}:\d{2}$'),
+    re.compile(r'^F\d$'),
     re.compile(r'la touche F\d'),
     re.compile(r'^GALAXIE\b'),
     re.compile(r'^atReader$'),
@@ -66,19 +66,15 @@ def _is_date(text: str) -> bool:
 
 
 def _is_rpps(text: str) -> bool:
-    """RPPS = exactly 11 digits standalone"""
     clean = text.strip()
     digits = re.sub(r'\D', '', clean)
     return len(digits) == 11 and bool(re.match(r'^(RPPS\s*:?\s*)?\d[\d\s]{9,}\d$', clean, re.IGNORECASE))
 
 
 def _extract_rpps_from_line(text: str) -> Optional[str]:
-    """Extract RPPS from lines like 'RC: 7594977I' or 'RPPS: 12345678901'"""
-    # Try RC: pattern (can have letters at end, 7+ chars)
     match = re.search(r'RC:\s*([A-Z0-9]{7,})', text, re.IGNORECASE)
     if match:
         return match.group(1)
-    # Try RPPS: pattern
     match = re.search(r'RPPS\s*:?\s*(\d{11})', text, re.IGNORECASE)
     if match:
         return match.group(1)
@@ -86,19 +82,15 @@ def _extract_rpps_from_line(text: str) -> Optional[str]:
 
 
 def _is_nir(text: str) -> bool:
-    """NIR = 13-15 digits (may have spaces/dashes)"""
     clean = re.sub(r'[\s\-]', '', text)
-    # Must start with 1 or 2 (gender digit)
     return bool(re.match(r'^[12]\d{12,14}$', clean))
 
 
 def _is_fse_number(text: str) -> bool:
-    """FSE/dossier numbers: 5-6+ digit sequences — checked AFTER NIR"""
     return bool(re.match(r'^\d{5,}', text.strip()))
 
 
 def _is_prescriber_line(text: str) -> bool:
-    """Match 'Prescripteur', 'Operateur', 'Opérateur' lines"""
     t = text.lower()
     return bool(re.search(r'presc[ri]*[pb]?teur|op[eé]rateur', t))
 
@@ -115,6 +107,36 @@ def _is_establishment(text: str) -> bool:
 
 def _is_montant(text: str) -> bool:
     return bool(re.search(r'\d+[,\.]\d{2}\s*€?$', text))
+
+
+def _extract_prescriber_name(text: str) -> str:
+    """
+    Extract doctor name from lines like:
+    - 'Operateur : CHAVANNES, SYLVIE'
+    - 'Opérateur : CHAVANNES, SYLVIEla touche F9 vous permet...'
+    Strategy: find text after colon, keep UPPERCASE chars until first lowercase
+    """
+    m = re.search(r'(?:op[eé]rateur|prescripteur)\s*:?\s*', text, re.IGNORECASE)
+    if not m:
+        return text.strip()
+
+    after = text[m.end():].strip()
+
+    # Keep uppercase letters, spaces, commas, hyphens — stop at first lowercase
+    name_chars = []
+    for ch in after:
+        if ch.isupper() or ch in ' ,-':
+            name_chars.append(ch)
+        elif ch == '\n':
+            break
+        else:
+            break  # lowercase = start of garbage like "la touche..."
+
+    name = ''.join(name_chars).strip(' ,')
+    # Remove trailing single letter artifact (e.g. 'I' from 'Ia touche')
+    import re as _re
+    name = _re.sub(r'\s+[A-Z]$', '', name).strip(' ,')
+    return name if name else after.split('la ')[0].strip()
 
 
 # ── Noise check ───────────────────────────────────────────────────────────────
@@ -148,7 +170,7 @@ def classify_field(text: str) -> Optional[str]:
         return "establishment"
     if _is_rpps(text):
         return "rpps"
-    if _is_nir(text):                  # ← NIR checked BEFORE fse_number
+    if _is_nir(text):
         return "nir"
     if _is_montant(text):
         return "montant"
@@ -181,6 +203,24 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
         text = item.get("text", "")
         conf = item.get("confidence", 0)
 
+        # ── PRE-FILTER: extract key fields BEFORE noise check ─────────────
+        # Needed because "Opérateur : CHAVANNES, SYLVIEla touche F9..."
+        # is classified as noise (contains "la touche F9") but has doctor name
+
+        if _is_prescriber_line(text) and fields["prescriber"] is None:
+            fields["prescriber"] = _extract_prescriber_name(text)
+
+        rpps_extracted = _extract_rpps_from_line(text)
+        if rpps_extracted and fields["rpps"] is None:
+            fields["rpps"] = rpps_extracted
+
+        if _is_date(text):
+            date_matches = re.findall(r'\d{2}/\d{2}/\d{4}', text)
+            for d in date_matches:
+                if d not in fields["dates"]:
+                    fields["dates"].append(d)
+
+        # ── Now apply noise filter ────────────────────────────────────────
         if is_noise(text, conf):
             continue
 
@@ -191,36 +231,19 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
 
         relevant.append(entry)
 
-        # ── Extract RPPS from Maladie/coverage lines ──────────────────────
-        rpps_extracted = _extract_rpps_from_line(text)
-        if rpps_extracted and fields["rpps"] is None:
-            fields["rpps"] = rpps_extracted
-
-        # ── Extract dates from complex lines ──────────────────────────────
-        if _is_date(text) and field_type != "date":
-            # Extract just the dates from complex lines like "C9 Maladie ... au 30/09/2025"
-            date_matches = re.findall(r'\d{2}/\d{2}/\d{4}', text)
-            for d in date_matches:
-                if d not in fields["dates"]:
-                    fields["dates"].append(d)
-
         # ── Populate detected_fields ──────────────────────────────────────
         if field_type == "amy_code":
             fields["amy_codes"].append(text)
 
         elif field_type == "prescriber":
-            # Extract name after "Operateur :" or "Prescripteur :"
-            colon_match = re.search(r'(?:op[eé]rateur|prescripteur)\s*:?\s*(.+)$', text.strip(), re.IGNORECASE)
-            if colon_match:
-                fields["prescriber"] = colon_match.group(1).strip()
-            else:
-                fields["prescriber"] = text
+            name = _extract_prescriber_name(text)
+            if name:
+                fields["prescriber"] = name
 
         elif field_type == "practitioner":
             fields["practitioner"] = text
 
         elif field_type == "establishment":
-            # Clean "Etablissement :CDS ..." → "CDS ..."
             clean = re.sub(r'^[Ee]tablissement\s*:?\s*', '', text).strip()
             fields["establishment"] = clean
 
@@ -233,7 +256,6 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
                 fields["nir"] = text
 
         elif field_type == "date":
-            # Only add clean DD/MM/YYYY dates (not full lines)
             date_matches = re.findall(r'\d{2}/\d{2}/\d{4}', text)
             for d in date_matches:
                 if d not in fields["dates"]:
@@ -247,29 +269,9 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
             fields["montant"] = text
 
         elif field_type is None:
-            # Check patient name
-            upper = text.upper().strip()
             if fields["patient_name"] is None and _is_patient_name(text):
                 fields["patient_name"] = text
                 entry["field"] = "patient_name"
-
-    # ── Second pass: enrich prescriber name ───────────────────────────────────
-    _NAME_RE = re.compile(r'^[A-ZÉÈÊËÀÂÄÙÛÜÓÖÎÏÇ\-, ]{3,}$')
-
-    if fields["prescriber"]:
-        prescriber_idx = next(
-            (i for i, e in enumerate(relevant) if e.get("field") == "prescriber"), None
-        )
-        if prescriber_idx is not None:
-            for j in range(prescriber_idx + 1, min(prescriber_idx + 4, len(relevant))):
-                candidate = relevant[j]
-                if candidate.get("field"):
-                    continue
-                ct = candidate["text"].strip()
-                if _NAME_RE.match(ct) and ',' in ct and len(ct) > len(fields["prescriber"]):
-                    fields["prescriber"] = ct
-                    candidate["field"] = "prescriber"
-                    break
 
     return {
         "relevant_texts": relevant,

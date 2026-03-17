@@ -206,7 +206,23 @@ def fill_prescription_template(
                 "price": info.get("price", ""),
             })
         _insert_acts(doc, acts_with_labels)
+    # --- P[28]: Cachet + Signature ---
+    p28 = paras[28]
+    cachet_text = ""
+    if center_info:
+        cachet_text = (
+            f"{center_info.get('name', '')}\n"
+            f"FINESS: {finess}\n"
+            f"{center_info.get('address', '')}\n"
+            f"Tél: {center_info.get('tel', '')}"
+        )
+    signature_text = doc_name if doc_name else ""
 
+    for run in p28.runs:
+        if "Cachet du centre" in run.text:
+            run.text = f"Cachet du centre\n{cachet_text}"
+        elif "Signature du prescripteur" in run.text:
+            run.text = f"Signature du prescripteur\n{signature_text}"
     # --- Save ---
     output_dir = Path(tpl).parent / "filled"
     output_dir.mkdir(parents=True, exist_ok=True)
