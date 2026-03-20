@@ -11,6 +11,7 @@ from pathlib import Path
 import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv(r"C:/Users/hp/Downloads/neuro/Neuro_backend/.env")
 
@@ -35,9 +36,58 @@ def get_center_info() -> dict:
         "email":   os.getenv("CENTER_EMAIL",   "contact@cds-nanterre.fr"),
     }
 
-CENTER_FINESS = os.getenv("CENTER_FINESS", "920036563")
-CENTER_CITY   = os.getenv("CENTER_CITY",   "Nanterre")
-EDM_BASE_PATH = os.getenv("EDM_BASE_PATH", "C:/temp/fse_ocr")
+CENTER_FINESS  = os.getenv("CENTER_FINESS",  "920036563")
+CENTER_CITY    = os.getenv("CENTER_CITY",    "Nanterre")
+EDM_BASE_PATH  = os.getenv("EDM_BASE_PATH",  "C:/temp/fse_ocr")
+GALAXIE_EDM    = os.getenv("GALAXIE_EDM",    "D:/Stimut/Documents_Patients")
+
+
+# ── EDM path helpers ─────────────────────────────────────────────────────────
+
+def ipp_to_edm_path(ipp: str) -> str:
+    """
+    Convert IPP number to Galaxie EDM directory path.
+    Read digits from right to left in pairs:
+    15035  → 00/00/00/15/03/5
+    145897 → 00/00/01/45/89/7
+    """
+    s = str(ipp).strip()
+    unit = s[-1]          # last digit = unit folder
+    rest = s[:-1]         # remaining digits
+
+    pairs = []
+    while rest:
+        pairs.append(rest[-2:].zfill(2))
+        rest = rest[:-2]
+
+    # Always 5 pairs + unit = 6 folders total
+    while len(pairs) < 5:
+        pairs.append("00")
+
+    pairs.reverse()
+    return os.path.join(*pairs, unit)
+
+
+def get_edm_dir(ipp: str, base_path: str) -> str:
+    """Full EDM directory path for a patient IPP."""
+    return os.path.join(base_path, ipp_to_edm_path(ipp))
+
+
+def update_info_pdf(edm_dir: str, pdf_filename: str, jpg_filename: str):
+    """
+    Append a line to infoPdf file in the EDM directory.
+    Format: pdf_filename|jpg_filename|timestamp
+    """
+    info_pdf_path = os.path.join(edm_dir, "infoPdf")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"{pdf_filename}|{jpg_filename}|{timestamp}\n"
+    try:
+        with open(info_pdf_path, "a", encoding="utf-8") as f:
+            f.write(line)
+        logger.info(f"✅ infoPdf updated: {info_pdf_path}")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not update infoPdf: {e}")
+
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
 class ParseResponse(BaseModel):
@@ -247,15 +297,16 @@ async def parse_and_generate(
     edm_base_path: str = EDM_BASE_PATH,
 ):
     """
-    Full pipeline: Image → OCR → JSON → fill_template → PDF + Thumbnail
+    Full pipeline: Image → OCR → JSON → fill_template → PDF + Thumbnail + infoPdf
 
     Steps:
-    1. Upload image/screenshot of FSE window
+    1. Upload FSE screenshot
     2. PaddleOCR extracts text
-    3. ocr_to_schema structures data (no API key needed)
-    4. fill_template fills the Word template → PDF
-    5. create_thumbnail generates JPG thumbnail
-    6. Returns PDF + thumbnail paths
+    3. ocr_to_schema structures data
+    4. fill_template fills Word template → PDF
+    5. Thumbnail generated
+    6. PDF saved in EDM path based on patient IPP
+    7. infoPdf updated
     """
     try:
         if not ocr_engine:
@@ -279,19 +330,35 @@ async def parse_and_generate(
             )
             logger.info(f"OCR extracted {len(ocr_text_lines)} lines")
 
-            # Step 2: Structure data (no API)
+            # Step 2: Structure data
             extraction_data = extract_schema_from_ocr(ocr_results_with_conf, ocr_text)
 
-            # Step 3: Fill template → PDF
+            # Step 3: Determine paths
             center_info = get_center_info()
             backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             sys.path.insert(0, backend_dir)
             from fill_template import fill_and_convert_to_pdf
 
-            fse_number = extraction_data.get("fse_number", unique_id)
-            os.makedirs(edm_base_path, exist_ok=True)
-            pdf_output = os.path.join(edm_base_path, f"Prescription_{finess}_FSE_{fse_number}.pdf")
+            # FSE number from OCR (e.g. "553381") — fallback to unique_id
+            fse_number = str(extraction_data.get("fse_number") or unique_id)
 
+            # IPP from OCR (patient number in Galaxie) — fallback to fse_number
+            ipp = str(extraction_data.get("patient", {}).get("ipp") or
+                      extraction_data.get("ipp") or fse_number)
+
+            # Build EDM directory: EDM_BASE_PATH / IPP_path
+            edm_dir = get_edm_dir(ipp, edm_base_path)
+            os.makedirs(edm_dir, exist_ok=True)
+            os.makedirs(os.path.join(edm_dir, "thumbnails"), exist_ok=True)
+            logger.info(f"EDM directory: {edm_dir}")
+
+            # PDF name: Ordonnance_{FINESS}_{FSE_numero}.pdf
+            pdf_filename  = f"Ordonnance_{finess}_{fse_number}.pdf"
+            jpg_filename  = f"Ordonnance_{finess}_{fse_number}.jpg"
+            pdf_output    = os.path.join(edm_dir, pdf_filename)
+            thumbnail_path = os.path.join(edm_dir, "thumbnails", jpg_filename)
+
+            # Step 4: Fill template → PDF
             def generate_pdf_sync():
                 return fill_and_convert_to_pdf(
                     extraction_data=extraction_data,
@@ -304,14 +371,9 @@ async def parse_and_generate(
             pdf_path = await asyncio.get_event_loop().run_in_executor(None, generate_pdf_sync)
             logger.info(f"✅ PDF generated: {pdf_path}")
 
-            # Step 4: Create thumbnail
-            thumbnail_path = None
+            # Step 5: Create thumbnail
             try:
                 from prescription_generator import create_thumbnail
-                thumbnail_dir = os.path.join(edm_base_path, "thumbnails")
-                os.makedirs(thumbnail_dir, exist_ok=True)
-                thumbnail_filename = f"Prescription_{finess}_FSE_{fse_number}.jpg"
-                thumbnail_path = os.path.join(thumbnail_dir, thumbnail_filename)
 
                 def create_thumb_sync():
                     return create_thumbnail(pdf_path, thumbnail_path)
@@ -320,13 +382,17 @@ async def parse_and_generate(
                 logger.info(f"✅ Thumbnail created: {thumbnail_path}")
             except Exception as e:
                 logger.warning(f"⚠️ Thumbnail creation failed (non-blocking): {e}")
+                thumbnail_path = None
+
+            # Step 6: Update infoPdf
+            update_info_pdf(edm_dir, pdf_filename, jpg_filename)
 
             return PrescriptionResponse(
                 success=True,
                 message="Prescription générée avec succès",
                 pdf_path=pdf_path,
                 thumbnail_path=thumbnail_path,
-                edm_path=edm_base_path
+                edm_path=edm_dir
             )
 
         finally:

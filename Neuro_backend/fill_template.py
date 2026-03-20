@@ -12,21 +12,25 @@ P[12]: Docteur / RPPS
 P[14]: Les soins orthoptiques suivants
 P[15]: ACTES PRESCRITS
 P[16-25]: Actes (slots vides)
+P[28]: Cachet (image PNG) + Signature (image PNG) — tableau 2 colonnes
 """
 
 import os
-import copy
-import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
 import re
+import copy
 
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt, RGBColor, Inches, Cm
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from loguru import logger
 
-DEFAULT_TEMPLATE = Path(__file__).parent / "templates" / "prescription" / "Ordonnance_Template vierge.docx"
+DEFAULT_TEMPLATE      = Path(__file__).parent / "templates" / "prescription" / "Ordonnance_Template vierge.docx"
+DEFAULT_CACHET_PNG    = Path(__file__).parent / "templates" / "prescription" / "cachet.png"
+DEFAULT_SIGNATURE_PNG = Path(__file__).parent / "templates" / "prescription" / "signature.png"
 
 AMY_TABLE: Dict[str, Dict[str, str]] = {
     'AMY 8':    {'label': "Mesure de l'acuité visuelle et de la réfraction – Renouvellement", 'price': '20,80 €'},
@@ -67,7 +71,6 @@ def _format_date_fr(iso_date: Optional[str]) -> str:
 
 
 def _insert_acts(doc, acts_with_labels: List[Dict[str, str]]):
-    """Insert acts into slots P[16] to P[25]"""
     actes_idx = None
     for i, p in enumerate(doc.paragraphs):
         if 'ACTES PRESCRITS' in p.text:
@@ -87,6 +90,64 @@ def _insert_acts(doc, acts_with_labels: List[Dict[str, str]]):
         run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
 
 
+def _replace_p28_with_table(doc, p28, cachet_path: Optional[str], signature_path: Optional[str]):
+    """Replace P[28] with borderless 1x2 table: Cachet | Signature"""
+    tbl = doc.add_table(rows=1, cols=2)
+
+    # Remove borders
+    for cell in tbl.rows[0].cells:
+        tc = cell._tc
+        tcPr = tc.get_or_add_tcPr()
+        tcBorders = OxmlElement('w:tcBorders')
+        for border_name in ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']:
+            border = OxmlElement(f'w:{border_name}')
+            border.set(qn('w:val'), 'nil')
+            tcBorders.append(border)
+        tcPr.append(tcBorders)
+
+    for cell in tbl.rows[0].cells:
+        cell.width = Cm(8)
+
+    cell_left  = tbl.rows[0].cells[0]
+    cell_right = tbl.rows[0].cells[1]
+
+    # Left: Cachet
+    p_left = cell_left.paragraphs[0]
+    label_run = p_left.add_run("Cachet du centre\n")
+    label_run.bold = True
+    label_run.font.size = Pt(9)
+    if cachet_path and Path(cachet_path).exists():
+        try:
+            p_left.add_run().add_picture(cachet_path, width=Inches(1.4))
+        except Exception as e:
+            logger.warning(f"Cachet error: {e}")
+    else:
+        p_left.add_run("[cachet manquant]")
+
+    # Right: Signature
+    p_right = cell_right.paragraphs[0]
+    label_run2 = p_right.add_run("Signature du prescripteur\n")
+    label_run2.bold = True
+    label_run2.font.size = Pt(9)
+    if signature_path and Path(signature_path).exists():
+        try:
+            p_right.add_run().add_picture(signature_path, width=Inches(1.4))
+        except Exception as e:
+            logger.warning(f"Signature error: {e}")
+    else:
+        p_right.add_run("[signature manquante]")
+
+    # Move table to replace P[28]
+    p28._element.addnext(tbl._tbl)
+
+    # Clear P[28]
+    for run in p28.runs:
+        run.text = ""
+    p = p28._p
+    for r in p.findall(qn('w:r')):
+        p.remove(r)
+
+
 def fill_prescription_template(
     extraction_data: Dict,
     center_info: Optional[Dict[str, str]] = None,
@@ -94,13 +155,18 @@ def fill_prescription_template(
     city: str = "",
     amy_table: Optional[Dict[str, Dict[str, str]]] = None,
     template_path: Optional[str] = None,
+    cachet_png: Optional[str] = None,
+    signature_png: Optional[str] = None,
 ) -> str:
 
     tpl = Path(template_path) if template_path else DEFAULT_TEMPLATE
     if not tpl.exists():
         raise FileNotFoundError(f"Template not found: {tpl}")
 
-    doc = Document(str(tpl))
+    cachet_path    = cachet_png    or (str(DEFAULT_CACHET_PNG)    if DEFAULT_CACHET_PNG.exists()    else None)
+    signature_path = signature_png or (str(DEFAULT_SIGNATURE_PNG) if DEFAULT_SIGNATURE_PNG.exists() else None)
+
+    doc   = Document(str(tpl))
     paras = doc.paragraphs
 
     patient   = extraction_data.get("patient", {})
@@ -111,7 +177,7 @@ def fill_prescription_template(
     # --- P[0]: Centre name ---
     if center_info and center_info.get("name"):
         for run in paras[0].runs:
-            if "Nom du centre" in run.text or run.text.strip():
+            if run.text.strip():
                 run.text = center_info["name"]
                 break
 
@@ -120,8 +186,8 @@ def fill_prescription_template(
         p2 = paras[2]
         for run in p2.runs:
             if "Adresse" in run.text:
-                run.text = f"Adresse\u00a0: {center_info.get('address', '')}"
-            elif "Tél" in run.text:
+                run.text = f"Adresse : {center_info.get('address', '')}"
+            elif "Tél" in run.text or "T\u00e9l" in run.text:
                 run.text = f"\nTél : {center_info.get('tel', '')}"
             elif "Email" in run.text:
                 run.text = f"\nEmail : {center_info.get('email', '')}"
@@ -131,63 +197,59 @@ def fill_prescription_template(
     for run in p4.runs:
         if "FINESS" in run.text:
             run.text = f"FINESS : {finess}"
-        elif "Fait à" in run.text:
+        elif "Fait" in run.text:
             run.text = f"Fait à {city}"
 
-    # --- P[5]: Date ____ / ____ / ________ ---
+    # --- P[5]: Date DD / MM / YYYY ---
     if form_date:
         parts = form_date.split("/")
         if len(parts) == 3:
-            p5 = paras[5]
-            runs = p5.runs
-            # runs: [0]='Date : ' [1]='____ ' [2]=' / ' [3]='____ ' [4]=' / ' [5]='________'
+            runs = paras[5].runs
             if len(runs) >= 6:
-                runs[1].text = parts[0]   # day
-                runs[3].text = parts[1]   # month
-                runs[5].text = parts[2]   # year
+                runs[1].text = parts[0]
+                runs[3].text = parts[1]
+                runs[5].text = parts[2]
 
     # --- P[8]: Nom / Prénom ---
     last_name  = patient.get("last_name") or ""
     first_name = patient.get("first_name") or ""
-    p8 = paras[8]
-    for run in p8.runs:
+    for run in paras[8].runs:
         if "Nom :" in run.text:
             run.text = f"Nom : {last_name}"
-        elif "Prénom :" in run.text:
+        elif "Prénom :" in run.text or "Pr\u00e9nom :" in run.text:
             run.text = f"Prénom : {first_name}"
 
     # --- P[9]: NIR ---
     nir = patient.get("nir") or ""
-    p9 = paras[9]
-    for run in p9.runs:
-        if "Sécurité Sociale" in run.text:
+    for run in paras[9].runs:
+        if "Sociale" in run.text or "NIR" in run.text:
             run.text = f"N° Sécurité Sociale (NIR) : {nir}"
             break
 
     # --- P[10]: Date de naissance ---
     birth = _format_date_fr(patient.get("birth_date"))
-    p10 = paras[10]
-    for run in p10.runs:
-        if "Date de naissance" in run.text:
+    for run in paras[10].runs:
+        if "naissance" in run.text:
             run.text = f"Date de naissance : {birth}"
             break
 
     # --- P[12]: Docteur / RPPS ---
     doc_name = doctor.get("full_name") or ""
-    rpps     = doctor.get("rpps") or ""
-    p12 = paras[12]
-    for run in p12.runs:
+    # Fix trailing single-letter artifact ONLY when preceded by space
+    # \s+ ensures "VERON" stays intact but "SYLVIE I" → "SYLVIE"
+    doc_name = re.sub(r'\s+[A-Z]$', '', doc_name).strip(' ,')
+    rpps = doctor.get("rpps") or ""
+    for run in paras[12].runs:
         if "Docteur :" in run.text:
             run.text = f"Je soussigné(e), Docteur : {doc_name}"
-        elif run.text.strip() == " : " and p12.runs.index(run) > 0:
-            prev = p12.runs[p12.runs.index(run) - 1]
+        elif run.text.strip() == " : " and paras[12].runs.index(run) > 0:
+            prev = paras[12].runs[paras[12].runs.index(run) - 1]
             if "RPPS" in prev.text:
                 run.text = f" : {rpps}"
 
     # --- P[14]: Les soins orthoptiques ---
     description = care.get("description") or ""
-    p14 = paras[14]
-    for run in p14.runs:
+    for run in paras[14].runs:
         if "soins orthoptiques" in run.text:
             run.text = f"Les soins orthoptiques suivants : {description}"
             break
@@ -206,27 +268,14 @@ def fill_prescription_template(
                 "price": info.get("price", ""),
             })
         _insert_acts(doc, acts_with_labels)
-    # --- P[28]: Cachet + Signature ---
-    p28 = paras[28]
-    cachet_text = ""
-    if center_info:
-        cachet_text = (
-            f"{center_info.get('name', '')}\n"
-            f"FINESS: {finess}\n"
-            f"{center_info.get('address', '')}\n"
-            f"Tél: {center_info.get('tel', '')}"
-        )
-    signature_text = doc_name if doc_name else ""
 
-    for run in p28.runs:
-        if "Cachet du centre" in run.text:
-            run.text = f"Cachet du centre\n{cachet_text}"
-        elif "Signature du prescripteur" in run.text:
-            run.text = f"Signature du prescripteur\n{signature_text}"
+    # --- P[28]: Cachet + Signature ---
+    _replace_p28_with_table(doc, paras[28], cachet_path, signature_path)
+
     # --- Save ---
     output_dir = Path(tpl).parent / "filled"
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
     filled_path = output_dir / f"Ordonnance_filled_{timestamp}.docx"
     doc.save(str(filled_path))
     logger.info(f"Filled template saved: {filled_path}")
@@ -241,6 +290,8 @@ def fill_and_convert_to_pdf(
     city: str = "",
     amy_table: Optional[Dict[str, Dict[str, str]]] = None,
     template_path: Optional[str] = None,
+    cachet_png: Optional[str] = None,
+    signature_png: Optional[str] = None,
 ) -> str:
 
     filled_docx = fill_prescription_template(
@@ -250,6 +301,8 @@ def fill_and_convert_to_pdf(
         city=city,
         amy_table=amy_table,
         template_path=template_path,
+        cachet_png=cachet_png,
+        signature_png=signature_png,
     )
 
     os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)

@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
 OCR Result Filter for FSE Frame Analysis - FIXED
+Key fixes:
+- NIR-like lines "78950 -2 06 12 99 ..." not classified as fse_number
+- "Prescripteur :VS" → look at next line for full name
+- Prescriber from merged amount line "8,32@STAN ANAMARIA"
+- Opérateur = fallback only
+- IPP extracted from "15035 -2 77 03 99 312 069"
 """
 
 import re
@@ -49,6 +55,9 @@ _NOISE_PATTERNS = [
 
 MIN_CONFIDENCE = 0.35
 
+# P.Code pattern: 1-3 uppercase letters (initials like "VS", "BAZ")
+_PCODE_RE = re.compile(r'^[A-Z]{1,3}$')
+
 
 # ── Field detection helpers ───────────────────────────────────────────────────
 
@@ -86,13 +95,48 @@ def _is_nir(text: str) -> bool:
     return bool(re.match(r'^[12]\d{12,14}$', clean))
 
 
+def _is_nir_ipp_line(text: str) -> bool:
+    """
+    Detect NIR-like lines: '78950 -2 06 12 99 622 925' or '15035 -2 77 03 99 312 069'
+    These start with 4-6 digits followed by space-dash pattern.
+    Must NOT be classified as fse_number.
+    """
+    return bool(re.match(r'^\d{4,6}\s*[-]\s*\d', text.strip()))
+
+
 def _is_fse_number(text: str) -> bool:
-    return bool(re.match(r'^\d{5,}', text.strip()))
+    """
+    FSE/dossier number: standalone 5-6 digit number.
+    Must NOT match NIR-like lines (which contain dashes after first digits).
+    """
+    stripped = text.strip()
+    # Exclude NIR-like lines with dashes
+    if _is_nir_ipp_line(stripped):
+        return False
+    # Must be purely numeric (5-6 digits standalone)
+    return bool(re.match(r'^\d{5,6}$', stripped))
+
+
+def _extract_ipp_from_line(text: str) -> Optional[str]:
+    """Extract IPP from '15035 -2 77 03 99 312 069' → '15035'"""
+    match = re.match(r'^(\d{4,6})\s*[\-\s]', text.strip())
+    if match:
+        return match.group(1)
+    return None
+
+
+def _is_prescripteur_line(text: str) -> bool:
+    t = text.lower()
+    return bool(re.search(r'presc[ri]*[pb]?teur', t))
+
+
+def _is_operateur_line(text: str) -> bool:
+    t = text.lower()
+    return bool(re.search(r'op[eé]rateur', t))
 
 
 def _is_prescriber_line(text: str) -> bool:
-    t = text.lower()
-    return bool(re.search(r'presc[ri]*[pb]?teur|op[eé]rateur', t))
+    return _is_prescripteur_line(text) or _is_operateur_line(text)
 
 
 def _is_practitioner_line(text: str) -> bool:
@@ -109,20 +153,17 @@ def _is_montant(text: str) -> bool:
     return bool(re.search(r'\d+[,\.]\d{2}\s*€?$', text))
 
 
-def _extract_prescriber_name(text: str) -> str:
-    """
-    Extract doctor name from lines like:
-    - 'Operateur : CHAVANNES, SYLVIE'
-    - 'Opérateur : CHAVANNES, SYLVIEla touche F9 vous permet...'
-    Strategy: find text after colon, keep UPPERCASE chars until first lowercase
-    """
+def _is_uppercase_name(text: str) -> bool:
+    t = text.strip()
+    return bool(re.match(r'^[A-ZÉÈÊËÀÂÄÙÛÜÔÖÎÏÇ][A-ZÉÈÊËÀÂÄÙÛÜÔÖÎÏÇ\-]{2,}$', t))
+
+
+def _extract_name_after_colon(text: str) -> str:
     m = re.search(r'(?:op[eé]rateur|prescripteur)\s*:?\s*', text, re.IGNORECASE)
     if not m:
         return text.strip()
 
     after = text[m.end():].strip()
-
-    # Keep uppercase letters, spaces, commas, hyphens — stop at first lowercase
     name_chars = []
     for ch in after:
         if ch.isupper() or ch in ' ,-':
@@ -130,13 +171,23 @@ def _extract_prescriber_name(text: str) -> str:
         elif ch == '\n':
             break
         else:
-            break  # lowercase = start of garbage like "la touche..."
+            break
 
     name = ''.join(name_chars).strip(' ,')
-    # Remove trailing single letter artifact (e.g. 'I' from 'Ia touche')
-    import re as _re
-    name = _re.sub(r'\s+[A-Z]$', '', name).strip(' ,')
-    return name if name else after.split('la ')[0].strip()
+    name = re.sub(r'\s+[A-Z]$', '', name).strip(' ,')
+
+    # If only a P.Code (1-3 letters like "VS") → return empty, look at next line
+    if _PCODE_RE.match(name):
+        return ""
+
+    return name
+
+
+def _extract_prescriber_from_amount_line(text: str) -> Optional[str]:
+    match = re.search(r'[@€]\s*([A-ZÉÈÊËÀÂÄÙÛÜÔÖÎÏÇ][A-ZÉÈÊËÀÂÄÙÛÜÔÖÎÏÇ\s\-]{2,})$', text.strip())
+    if match:
+        return match.group(1).strip()
+    return None
 
 
 # ── Noise check ───────────────────────────────────────────────────────────────
@@ -172,6 +223,8 @@ def classify_field(text: str) -> Optional[str]:
         return "rpps"
     if _is_nir(text):
         return "nir"
+    if _is_nir_ipp_line(text):
+        return "nir_ipp"   # NIR-like line — skip as fse_number
     if _is_montant(text):
         return "montant"
     if _is_date(text):
@@ -187,40 +240,72 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
     relevant = []
     fields = {
         "patient_name": None,
-        "prescriber": None,
+        "prescriber":   None,
+        "operateur":    None,
         "practitioner": None,
         "establishment": None,
-        "rpps": None,
-        "nir": None,
-        "ipp": None,
-        "amy_codes": [],
-        "dates": [],
-        "fse_number": None,
-        "montant": None,
+        "rpps":         None,
+        "nir":          None,
+        "ipp":          None,
+        "amy_codes":    [],
+        "dates":        [],
+        "fse_number":   None,
+        "montant":      None,
     }
 
-    for item in ocr_results:
+    all_texts = [item.get("text", "") for item in ocr_results]
+
+    for idx, item in enumerate(ocr_results):
         text = item.get("text", "")
         conf = item.get("confidence", 0)
 
-        # ── PRE-FILTER: extract key fields BEFORE noise check ─────────────
-        # Needed because "Opérateur : CHAVANNES, SYLVIEla touche F9..."
-        # is classified as noise (contains "la touche F9") but has doctor name
+        # ── PRE-FILTER ────────────────────────────────────────────────────────
 
-        if _is_prescriber_line(text) and fields["prescriber"] is None:
-            fields["prescriber"] = _extract_prescriber_name(text)
+        # Prescripteur → real doctor
+        if _is_prescripteur_line(text) and fields["prescriber"] is None:
+            name = _extract_name_after_colon(text)
+            if name:
+                fields["prescriber"] = name
+            else:
+                # P.Code only → look at next non-empty line
+                next_idx = idx + 1
+                while next_idx < len(all_texts):
+                    next_text = all_texts[next_idx].strip()
+                    if _is_uppercase_name(next_text):
+                        fields["prescriber"] = next_text
+                        break
+                    elif next_text:
+                        break
+                    next_idx += 1
 
+        # Opérateur → fallback
+        if _is_operateur_line(text) and fields["operateur"] is None:
+            name = _extract_name_after_colon(text)
+            if name:
+                fields["operateur"] = name
+
+        # Prescriber from amount+name merged line
+        prescriber_from_amount = _extract_prescriber_from_amount_line(text)
+        if prescriber_from_amount and fields["prescriber"] is None:
+            fields["prescriber"] = prescriber_from_amount
+
+        # IPP from NIR-like line
+        ipp_extracted = _extract_ipp_from_line(text)
+        if ipp_extracted and fields["ipp"] is None:
+            fields["ipp"] = ipp_extracted
+
+        # RPPS
         rpps_extracted = _extract_rpps_from_line(text)
         if rpps_extracted and fields["rpps"] is None:
             fields["rpps"] = rpps_extracted
 
+        # Dates
         if _is_date(text):
-            date_matches = re.findall(r'\d{2}/\d{2}/\d{4}', text)
-            for d in date_matches:
+            for d in re.findall(r'\d{2}/\d{2}/\d{4}', text):
                 if d not in fields["dates"]:
                     fields["dates"].append(d)
 
-        # ── Now apply noise filter ────────────────────────────────────────
+        # ── Noise filter ──────────────────────────────────────────────────────
         if is_noise(text, conf):
             continue
 
@@ -228,17 +313,17 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
         entry = {"text": text, "confidence": conf}
         if field_type:
             entry["field"] = field_type
-
         relevant.append(entry)
 
-        # ── Populate detected_fields ──────────────────────────────────────
+        # ── Populate fields ───────────────────────────────────────────────────
         if field_type == "amy_code":
             fields["amy_codes"].append(text)
 
         elif field_type == "prescriber":
-            name = _extract_prescriber_name(text)
-            if name:
-                fields["prescriber"] = name
+            if _is_prescripteur_line(text) and fields["prescriber"] is None:
+                fields["prescriber"] = _extract_name_after_colon(text)
+            elif _is_operateur_line(text) and fields["operateur"] is None:
+                fields["operateur"] = _extract_name_after_colon(text)
 
         elif field_type == "practitioner":
             fields["practitioner"] = text
@@ -255,9 +340,11 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
             if fields["nir"] is None:
                 fields["nir"] = text
 
+        elif field_type == "nir_ipp":
+            pass  # Already handled in pre-filter (IPP extraction)
+
         elif field_type == "date":
-            date_matches = re.findall(r'\d{2}/\d{2}/\d{4}', text)
-            for d in date_matches:
+            for d in re.findall(r'\d{2}/\d{2}/\d{4}', text):
                 if d not in fields["dates"]:
                     fields["dates"].append(d)
 
@@ -272,6 +359,10 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
             if fields["patient_name"] is None and _is_patient_name(text):
                 fields["patient_name"] = text
                 entry["field"] = "patient_name"
+
+    # ── Final: Opérateur fallback ─────────────────────────────────────────────
+    if fields["prescriber"] is None and fields["operateur"]:
+        fields["prescriber"] = fields["operateur"]
 
     return {
         "relevant_texts": relevant,
