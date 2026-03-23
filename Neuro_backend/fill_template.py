@@ -2,13 +2,14 @@
 """
 Word Prescription Template Filler - FIXED paragraph indices
 P[0]:  Nom du centre
+P[1]:  Logo (image PNG)
 P[2]:  Adresse / Tél / Email
 P[4]:  FINESS + Fait à
 P[5]:  Date DD / MM / YYYY
 P[8]:  Nom / Prénom
 P[9]:  NIR
 P[10]: Date de naissance
-P[12]: Docteur / RPPS
+P[12]: Docteur / RPPS  runs: [0]='Je soussigné(e), Docteur : ' [1]='spaces' [2]='RPPS' [3]=' : '
 P[14]: Les soins orthoptiques suivants
 P[15]: ACTES PRESCRITS
 P[16-25]: Actes (slots vides)
@@ -31,6 +32,7 @@ from loguru import logger
 DEFAULT_TEMPLATE      = Path(__file__).parent / "templates" / "prescription" / "Ordonnance_Template vierge.docx"
 DEFAULT_CACHET_PNG    = Path(__file__).parent / "templates" / "prescription" / "cachet.png"
 DEFAULT_SIGNATURE_PNG = Path(__file__).parent / "templates" / "prescription" / "signature.png"
+DEFAULT_LOGO_PNG      = Path(__file__).parent / "templates" / "prescription" / "logo.png"
 
 AMY_TABLE: Dict[str, Dict[str, str]] = {
     'AMY 8':    {'label': "Mesure de l'acuité visuelle et de la réfraction – Renouvellement", 'price': '20,80 €'},
@@ -94,7 +96,6 @@ def _replace_p28_with_table(doc, p28, cachet_path: Optional[str], signature_path
     """Replace P[28] with borderless 1x2 table: Cachet | Signature"""
     tbl = doc.add_table(rows=1, cols=2)
 
-    # Remove borders
     for cell in tbl.rows[0].cells:
         tc = cell._tc
         tcPr = tc.get_or_add_tcPr()
@@ -111,36 +112,32 @@ def _replace_p28_with_table(doc, p28, cachet_path: Optional[str], signature_path
     cell_left  = tbl.rows[0].cells[0]
     cell_right = tbl.rows[0].cells[1]
 
-    # Left: Cachet
     p_left = cell_left.paragraphs[0]
     label_run = p_left.add_run("Cachet du centre\n")
     label_run.bold = True
     label_run.font.size = Pt(9)
     if cachet_path and Path(cachet_path).exists():
         try:
-            p_left.add_run().add_picture(cachet_path, width=Inches(1.4))
+            p_left.add_run().add_picture(cachet_path, width=Inches(1.1))
         except Exception as e:
             logger.warning(f"Cachet error: {e}")
     else:
         p_left.add_run("[cachet manquant]")
 
-    # Right: Signature
     p_right = cell_right.paragraphs[0]
     label_run2 = p_right.add_run("Signature du prescripteur\n")
     label_run2.bold = True
     label_run2.font.size = Pt(9)
     if signature_path and Path(signature_path).exists():
         try:
-            p_right.add_run().add_picture(signature_path, width=Inches(1.4))
+            p_right.add_run().add_picture(signature_path, width=Inches(1.1))
         except Exception as e:
             logger.warning(f"Signature error: {e}")
     else:
         p_right.add_run("[signature manquante]")
 
-    # Move table to replace P[28]
     p28._element.addnext(tbl._tbl)
 
-    # Clear P[28]
     for run in p28.runs:
         run.text = ""
     p = p28._p
@@ -157,6 +154,7 @@ def fill_prescription_template(
     template_path: Optional[str] = None,
     cachet_png: Optional[str] = None,
     signature_png: Optional[str] = None,
+    logo_png: Optional[str] = None,
 ) -> str:
 
     tpl = Path(template_path) if template_path else DEFAULT_TEMPLATE
@@ -165,6 +163,7 @@ def fill_prescription_template(
 
     cachet_path    = cachet_png    or (str(DEFAULT_CACHET_PNG)    if DEFAULT_CACHET_PNG.exists()    else None)
     signature_path = signature_png or (str(DEFAULT_SIGNATURE_PNG) if DEFAULT_SIGNATURE_PNG.exists() else None)
+    logo_path      = logo_png      or (str(DEFAULT_LOGO_PNG)      if DEFAULT_LOGO_PNG.exists()      else None)
 
     doc   = Document(str(tpl))
     paras = doc.paragraphs
@@ -180,6 +179,26 @@ def fill_prescription_template(
             if run.text.strip():
                 run.text = center_info["name"]
                 break
+
+    # --- P[1]: Logo ---
+    if logo_path and Path(logo_path).exists():
+        p1 = paras[1]
+        # Clear existing runs
+        for run in p1.runs:
+            run.text = ""
+        p = p1._p
+        for r in p.findall(qn('w:r')):
+            p.remove(r)
+        # Insert logo image
+        try:
+            p1.add_run().add_picture(logo_path, width=Inches(1.0))
+            logger.info(f"Logo inserted: {logo_path}")
+        except Exception as e:
+            logger.warning(f"Logo error: {e}")
+    else:
+        # Remove "logos" placeholder text
+        for run in paras[1].runs:
+            run.text = ""
 
     # --- P[2]: Adresse / Tél / Email ---
     if center_info:
@@ -234,18 +253,22 @@ def fill_prescription_template(
             break
 
     # --- P[12]: Docteur / RPPS ---
+    # runs: [0]='Je soussigné(e), Docteur : ' [1]='     ' [2]='RPPS' [3]=' : '
     doc_name = doctor.get("full_name") or ""
-    # Fix trailing single-letter artifact ONLY when preceded by space
-    # \s+ ensures "VERON" stays intact but "SYLVIE I" → "SYLVIE"
     doc_name = re.sub(r'\s+[A-Z]$', '', doc_name).strip(' ,')
     rpps = doctor.get("rpps") or ""
-    for run in paras[12].runs:
-        if "Docteur :" in run.text:
-            run.text = f"Je soussigné(e), Docteur : {doc_name}"
-        elif run.text.strip() == " : " and paras[12].runs.index(run) > 0:
-            prev = paras[12].runs[paras[12].runs.index(run) - 1]
-            if "RPPS" in prev.text:
-                run.text = f" : {rpps}"
+    p12_runs = paras[12].runs
+    if len(p12_runs) >= 4:
+        p12_runs[0].text = f"Je soussigné(e), Docteur : {doc_name}"
+        p12_runs[1].text = "     "
+        p12_runs[2].text = "RPPS"
+        p12_runs[3].text = f" : {rpps}"
+    else:
+        for run in paras[12].runs:
+            if "Docteur" in run.text:
+                run.text = f"Je soussigné(e), Docteur : {doc_name}"
+            elif "RPPS" in run.text:
+                run.text = f"RPPS : {rpps}"
 
     # --- P[14]: Les soins orthoptiques ---
     description = care.get("description") or ""
@@ -292,6 +315,7 @@ def fill_and_convert_to_pdf(
     template_path: Optional[str] = None,
     cachet_png: Optional[str] = None,
     signature_png: Optional[str] = None,
+    logo_png: Optional[str] = None,
 ) -> str:
 
     filled_docx = fill_prescription_template(
@@ -303,6 +327,7 @@ def fill_and_convert_to_pdf(
         template_path=template_path,
         cachet_png=cachet_png,
         signature_png=signature_png,
+        logo_png=logo_png,
     )
 
     os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)

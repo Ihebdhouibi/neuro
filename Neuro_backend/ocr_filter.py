@@ -2,11 +2,13 @@
 """
 OCR Result Filter for FSE Frame Analysis - FIXED
 Key fixes:
-- NIR-like lines "78950 -2 06 12 99 ..." not classified as fse_number
-- "Prescripteur :VS" → look at next line for full name
-- Prescriber from merged amount line "8,32@STAN ANAMARIA"
-- Opérateur = fallback only
-- IPP extracted from "15035 -2 77 03 99 312 069"
+- RPPS: accept 7-11 digits
+- AMY (8): parentheses format supported
+- Prescripteur: BAZ PATRICK (no space before colon)
+- Patient name: TEST IDEM priority over noise
+- NIR-like lines not classified as fse_number
+- Prescripteur P.Code → look at next line for full name
+- birth_date extracted from "Né(e) le DD/MM/YYYY" — excluded from dates[]
 """
 
 import re
@@ -25,7 +27,8 @@ _NOISE_EXACT = {
     "Centre2Soins", "la carte CPs",
     "Date acte", "Date acte:", "Nb Libellé acte", "Parcours", "Risque",
     "Taux", "Base Remb", "Commun", "Gestion desActes", "Gestion des Actes",
-    "TiersPayant", "Tiers Payant", "Nom praticien", "Nom pralicien",
+    "TiersPayant", "Tiers Payant", "Tiers Payant AMO", "Tiers Payant AMC",
+    "Nom praticien", "Nom pralicien",
     "Dossier N'FSE", "DossierN'FSE",
     "Autre Patient", "Ophtalmologue",
     "Etablissement:", "Actes", "Actes:", "Montant", "Acte:",
@@ -37,6 +40,10 @@ _NOISE_EXACT = {
     "Eacturer", "Facturer", "Acte defot", "Acte défaut",
     "guter", "Quter", "crD", "CDR", "ref", "REF", "REFVC", "PYX", "PVX",
     "la carte CPS", "la carte CPs", "AS",
+    "Prescripteur",
+    "Date Prescription :", "Date Prescription",
+    "Assurance Maladie Obligatoire", "Assurance Maladie Complémentaire",
+    "Récapitulatif des actes", "Forcage",
 }
 
 _NOISE_PATTERNS = [
@@ -51,11 +58,23 @@ _NOISE_PATTERNS = [
     re.compile(r'^REF\('),
     re.compile(r'^\d+%\d'),
     re.compile(r'^\d+%$'),
+    re.compile(r'^Tiers Payant\b'),
+    re.compile(r'^Assuré$'),
+    re.compile(r'^Bénéficiaire$'),
+    re.compile(r'^Médecin Traitant'),
+    re.compile(r'^Parcours de soins'),
+    re.compile(r'^Condition d.exercice'),
+    re.compile(r'^Gestion Séparée'),
+    re.compile(r'^Convention Sélection'),
+    re.compile(r'^Formule \d'),
+    re.compile(r'^052\$'),
+    re.compile(r'^Accident de droit'),
+    re.compile(r'^Montant Total des honoraires'),
+    re.compile(r'^\d+ ans \(\d{2}/\d{2}/\d{4}\)$'),  # "34 ans (31/10/1990)"
+    re.compile(r'^N[eé][eé]?\s*(?:\(e\))?\s*le\s+\d{2}/\d{2}/\d{4}$', re.IGNORECASE),  # "Né(e) le 31/10/1990"
 ]
 
 MIN_CONFIDENCE = 0.35
-
-# P.Code pattern: 1-3 uppercase letters (initials like "VS", "BAZ")
 _PCODE_RE = re.compile(r'^[A-Z]{1,3}$')
 
 
@@ -63,28 +82,55 @@ _PCODE_RE = re.compile(r'^[A-Z]{1,3}$')
 
 def _is_patient_name(text: str) -> bool:
     t = text.upper().strip()
-    return bool(re.match(r'^[A-ZÉÈÊËÀÂÄÙÛÜÓÖÎÏÇ\- ]{3,}$', t) and len(t.split()) <= 4)
+    if not re.match(r'^[A-ZÉÈÊËÀÂÄÙÛÜÓÖÎÏÇ\- ]{3,}$', t):
+        return False
+    parts = t.split()
+    if len(parts) < 1 or len(parts) > 4:
+        return False
+    noise_phrases = {'TIERS', 'PAYANT', 'AMO', 'AMC', 'MR', 'MME', 'DR',
+                     'MEDECIN', 'EXTERIEUR', 'BENEFICIAIRE', 'ASSURE'}
+    if any(p in noise_phrases for p in parts):
+        return False
+    return True
 
 
 def _is_amy_code(text: str) -> bool:
-    return bool(re.search(r'AMY\s*\d', text, re.IGNORECASE))
+    return bool(re.search(r'AMY\s*\(?\s*\d', text, re.IGNORECASE))
 
 
 def _is_date(text: str) -> bool:
     return bool(re.search(r'\d{2}/\d{2}/\d{4}', text))
 
 
+def _extract_birth_date(text: str) -> Optional[str]:
+    """
+    Extract birth date from 'Né(e) le 31/10/1990' or '34 ans (31/10/1990)'.
+    Returns DD/MM/YYYY string or None.
+    """
+    # "Né(e) le 31/10/1990"
+    match = re.search(r'n[eé][eé]?\s*(?:\(e\))?\s*le\s+(\d{2}/\d{2}/\d{4})', text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    # "34 ans (31/10/1990)"
+    match = re.search(r'\d+\s+ans\s+\((\d{2}/\d{2}/\d{4})\)', text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
+
+
 def _is_rpps(text: str) -> bool:
     clean = text.strip()
+    if re.match(r'^RPPS\s*:?\s*(\d{7,11})$', clean, re.IGNORECASE):
+        return True
     digits = re.sub(r'\D', '', clean)
-    return len(digits) == 11 and bool(re.match(r'^(RPPS\s*:?\s*)?\d[\d\s]{9,}\d$', clean, re.IGNORECASE))
+    return len(digits) in range(7, 12) and bool(re.match(r'^\d{7,11}$', clean))
 
 
 def _extract_rpps_from_line(text: str) -> Optional[str]:
-    match = re.search(r'RC:\s*([A-Z0-9]{7,})', text, re.IGNORECASE)
+    match = re.search(r'RPPS\s*:?\s*(\d{7,11})', text, re.IGNORECASE)
     if match:
         return match.group(1)
-    match = re.search(r'RPPS\s*:?\s*(\d{11})', text, re.IGNORECASE)
+    match = re.search(r'RC:\s*([A-Z0-9]{7,})', text, re.IGNORECASE)
     if match:
         return match.group(1)
     return None
@@ -96,29 +142,21 @@ def _is_nir(text: str) -> bool:
 
 
 def _is_nir_ipp_line(text: str) -> bool:
-    """
-    Detect NIR-like lines: '78950 -2 06 12 99 622 925' or '15035 -2 77 03 99 312 069'
-    These start with 4-6 digits followed by space-dash pattern.
-    Must NOT be classified as fse_number.
-    """
-    return bool(re.match(r'^\d{4,6}\s*[-]\s*\d', text.strip()))
+    if re.match(r'^\d{4,6}\s*[-]\s*\d', text.strip()):
+        return True
+    if re.match(r'^[12]\s+\d{2}\s+\d{2}\s+\d{2}\s+\d{3}\s+\d{3}\s+\d{2}$', text.strip()):
+        return True
+    return False
 
 
 def _is_fse_number(text: str) -> bool:
-    """
-    FSE/dossier number: standalone 5-6 digit number.
-    Must NOT match NIR-like lines (which contain dashes after first digits).
-    """
     stripped = text.strip()
-    # Exclude NIR-like lines with dashes
     if _is_nir_ipp_line(stripped):
         return False
-    # Must be purely numeric (5-6 digits standalone)
     return bool(re.match(r'^\d{5,6}$', stripped))
 
 
 def _extract_ipp_from_line(text: str) -> Optional[str]:
-    """Extract IPP from '15035 -2 77 03 99 312 069' → '15035'"""
     match = re.match(r'^(\d{4,6})\s*[\-\s]', text.strip())
     if match:
         return match.group(1)
@@ -176,10 +214,8 @@ def _extract_name_after_colon(text: str) -> str:
     name = ''.join(name_chars).strip(' ,')
     name = re.sub(r'\s+[A-Z]$', '', name).strip(' ,')
 
-    # If only a P.Code (1-3 letters like "VS") → return empty, look at next line
     if _PCODE_RE.match(name):
         return ""
-
     return name
 
 
@@ -224,7 +260,7 @@ def classify_field(text: str) -> Optional[str]:
     if _is_nir(text):
         return "nir"
     if _is_nir_ipp_line(text):
-        return "nir_ipp"   # NIR-like line — skip as fse_number
+        return "nir_ipp"
     if _is_montant(text):
         return "montant"
     if _is_date(text):
@@ -239,18 +275,19 @@ def classify_field(text: str) -> Optional[str]:
 def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
     relevant = []
     fields = {
-        "patient_name": None,
-        "prescriber":   None,
-        "operateur":    None,
-        "practitioner": None,
+        "patient_name":  None,
+        "prescriber":    None,
+        "operateur":     None,
+        "practitioner":  None,
         "establishment": None,
-        "rpps":         None,
-        "nir":          None,
-        "ipp":          None,
-        "amy_codes":    [],
-        "dates":        [],
-        "fse_number":   None,
-        "montant":      None,
+        "rpps":          None,
+        "nir":           None,
+        "ipp":           None,
+        "birth_date":    None,  # from "Né(e) le DD/MM/YYYY"
+        "amy_codes":     [],
+        "dates":         [],    # act/form dates only (NOT birth date)
+        "fse_number":    None,
+        "montant":       None,
     }
 
     all_texts = [item.get("text", "") for item in ocr_results]
@@ -261,13 +298,30 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
 
         # ── PRE-FILTER ────────────────────────────────────────────────────────
 
+        # RPPS
+        rpps_extracted = _extract_rpps_from_line(text)
+        if rpps_extracted and fields["rpps"] is None:
+            fields["rpps"] = rpps_extracted
+
+        # Birth date — extract AND skip adding to dates[]
+        birth_extracted = _extract_birth_date(text)
+        if birth_extracted:
+            if fields["birth_date"] is None:
+                fields["birth_date"] = birth_extracted
+            # Do NOT add birth date to fields["dates"]
+
+        # Dates (act/form dates only — skip birth date lines)
+        elif _is_date(text):
+            for d in re.findall(r'\d{2}/\d{2}/\d{4}', text):
+                if d not in fields["dates"]:
+                    fields["dates"].append(d)
+
         # Prescripteur → real doctor
         if _is_prescripteur_line(text) and fields["prescriber"] is None:
             name = _extract_name_after_colon(text)
             if name:
                 fields["prescriber"] = name
             else:
-                # P.Code only → look at next non-empty line
                 next_idx = idx + 1
                 while next_idx < len(all_texts):
                     next_text = all_texts[next_idx].strip()
@@ -289,21 +343,10 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
         if prescriber_from_amount and fields["prescriber"] is None:
             fields["prescriber"] = prescriber_from_amount
 
-        # IPP from NIR-like line
+        # IPP
         ipp_extracted = _extract_ipp_from_line(text)
         if ipp_extracted and fields["ipp"] is None:
             fields["ipp"] = ipp_extracted
-
-        # RPPS
-        rpps_extracted = _extract_rpps_from_line(text)
-        if rpps_extracted and fields["rpps"] is None:
-            fields["rpps"] = rpps_extracted
-
-        # Dates
-        if _is_date(text):
-            for d in re.findall(r'\d{2}/\d{2}/\d{4}', text):
-                if d not in fields["dates"]:
-                    fields["dates"].append(d)
 
         # ── Noise filter ──────────────────────────────────────────────────────
         if is_noise(text, conf):
@@ -341,11 +384,12 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
                 fields["nir"] = text
 
         elif field_type == "nir_ipp":
-            pass  # Already handled in pre-filter (IPP extraction)
+            pass
 
         elif field_type == "date":
             for d in re.findall(r'\d{2}/\d{2}/\d{4}', text):
-                if d not in fields["dates"]:
+                # Never add birth_date to dates[]
+                if d not in fields["dates"] and d != fields.get("birth_date"):
                     fields["dates"].append(d)
 
         elif field_type == "fse_number":

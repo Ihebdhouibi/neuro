@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 OCR Filter → Extraction Schema adapter
-Converts ocr_filter.py output to prescription schema.
 Enriches prescriber with RPPS from practitioners DB.
+Passes birth_date from 'Né(e) le DD/MM/YYYY'.
 """
 import re
 from typing import Dict, Optional, List
@@ -18,7 +18,6 @@ def normalize_amy_code(raw: str) -> Optional[str]:
 
 
 def convert_date_fr_to_iso(date_str: Optional[str]) -> Optional[str]:
-    """Convert DD/MM/YYYY to YYYY-MM-DD"""
     if not date_str:
         return None
     match = re.search(r'(\d{2})/(\d{2})/(\d{4})', date_str)
@@ -28,39 +27,28 @@ def convert_date_fr_to_iso(date_str: Optional[str]) -> Optional[str]:
 
 
 def _lookup_practitioner(prescriber_name: str, pcode: Optional[str] = None) -> Optional[Dict]:
-    """
-    Look up practitioner in DB by P.Code or name.
-    Returns dict with full_name, rpps or None.
-    """
     try:
         import sys, os
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from practitioners import get_practitioner_by_pcode, get_practitioner_by_name
 
-        # Try by P.Code first (most reliable)
         if pcode:
             result = get_practitioner_by_pcode(pcode)
             if result:
                 return result
 
-        # Try by name (fuzzy match)
         if prescriber_name:
             result = get_practitioner_by_name(prescriber_name)
             if result:
                 return result
 
-    except Exception as e:
-        pass  # DB not available — use OCR data as-is
+    except Exception:
+        pass
 
     return None
 
 
 def ocr_fields_to_schema(detected_fields: Dict, ocr_raw_text: str = "") -> Dict:
-    """
-    Convert detected_fields from ocr_filter.py to prescription schema.
-    Enriches prescriber with RPPS from practitioners DB.
-    """
-
     # --- Patient name ---
     last_name = None
     first_name = None
@@ -78,41 +66,39 @@ def ocr_fields_to_schema(detected_fields: Dict, ocr_raw_text: str = "") -> Dict:
 
     # --- Dates ---
     dates = detected_fields.get("dates", [])
-    form_date  = convert_date_fr_to_iso(dates[0]) if len(dates) > 0 else None
-    birth_date = None  # FSE screen does not show birth date reliably
+    form_date = convert_date_fr_to_iso(dates[0]) if len(dates) > 0 else None
+
+    # --- Birth date from "Né(e) le DD/MM/YYYY" ---
+    birth_date_raw = detected_fields.get("birth_date")
+    birth_date = convert_date_fr_to_iso(birth_date_raw)
 
     # --- Prescriber + RPPS ---
     prescriber_raw = detected_fields.get("prescriber") or ""
     rpps_raw       = detected_fields.get("rpps")
 
-    # Try to enrich from DB
     practitioner = _lookup_practitioner(prescriber_raw)
 
     if practitioner:
-        # DB match found — use canonical name and RPPS
         full_name = practitioner["full_name"]
         rpps      = practitioner["rpps"] or rpps_raw
     else:
-        # No DB match — use OCR data
         full_name = prescriber_raw
         rpps      = rpps_raw
 
     # --- AMY codes ---
-    amy_codes_raw  = detected_fields.get("amy_codes", [])
+    amy_codes_raw   = detected_fields.get("amy_codes", [])
     acts_prescribed = []
     for code in amy_codes_raw:
         normalized = normalize_amy_code(code)
         if normalized and normalized not in acts_prescribed:
             acts_prescribed.append(normalized)
 
-    # --- IPP ---
-    ipp = detected_fields.get("ipp")
-
-    # --- FSE number ---
+    # --- IPP + FSE ---
+    ipp        = detected_fields.get("ipp")
     fse_number = detected_fields.get("fse_number")
 
     return {
-        "form_date": form_date,
+        "form_date":  form_date,
         "fse_number": fse_number,
         "patient": {
             "last_name":  last_name,
@@ -126,7 +112,7 @@ def ocr_fields_to_schema(detected_fields: Dict, ocr_raw_text: str = "") -> Dict:
             "rpps":      rpps,
         },
         "orthoptic_care": {
-            "description":    None,
+            "description":     None,
             "acts_prescribed": acts_prescribed,
         },
         "ocr_raw_text": ocr_raw_text,
@@ -134,9 +120,6 @@ def ocr_fields_to_schema(detected_fields: Dict, ocr_raw_text: str = "") -> Dict:
 
 
 def extract_from_ocr_results(ocr_results: List[Dict]) -> Dict:
-    """
-    Full pipeline: ocr_results → ocr_filter → DB lookup → schema
-    """
     import sys, os
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from ocr_filter import filter_frame_ocr
@@ -152,13 +135,13 @@ if __name__ == "__main__":
     import json
 
     test_ocr = [
-        {"text": "WESOLOWSKA-EISL NINA", "confidence": 0.95},
-        {"text": "28/10/2025",           "confidence": 0.99},
-        {"text": "Prescripteur :VS",      "confidence": 0.97},
-        {"text": "STANANAMARIA-VERON",    "confidence": 0.99},
-        {"text": "AMY 8",                 "confidence": 0.98},
-        {"text": "78950 -2 06 12 99 622 925", "confidence": 0.94},
-        {"text": "95990",                 "confidence": 0.99},
+        {"text": "RPPS : 759228075",        "confidence": 1.0},
+        {"text": "Prescripteur: BAZ PATRICK", "confidence": 1.0},
+        {"text": "TEST IDEM",                "confidence": 1.0},
+        {"text": "Né(e) le 31/10/1990",      "confidence": 1.0},
+        {"text": "AMY (8)",                   "confidence": 1.0},
+        {"text": "30/09/2025",               "confidence": 1.0},
+        {"text": "2 77 03 99 312 069 78",    "confidence": 0.94},
     ]
 
     result = extract_from_ocr_results(test_ocr)
