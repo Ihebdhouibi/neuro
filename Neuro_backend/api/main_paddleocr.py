@@ -3,9 +3,11 @@
 FSE OCR API - FastAPI Backend with PaddleOCR
 Simplified version for window capture screenshot processing
 """
-
+import zipfile
+import shutil
 import os
 import tempfile
+import uuid
 from typing import Optional
 from pathlib import Path
 import asyncio
@@ -14,6 +16,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 load_dotenv(r"C:/Users/hp/Downloads/neuro/Neuro_backend/.env")
+print("EDM_BASE_PATH from env:", os.getenv("EDM_BASE_PATH"))
+print("CENTER_FINESS from env:", os.getenv("CENTER_FINESS"))
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -254,7 +258,6 @@ async def parse_document(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_ext}")
 
         content = await file.read()
-        import uuid
         unique_id = str(uuid.uuid4())[:8]
         temp_path = os.path.join(temp_dir, f"upload_{unique_id}{file_ext}")
 
@@ -298,23 +301,18 @@ async def parse_and_generate(
 ):
     """
     Full pipeline: Image → OCR → JSON → fill_template → PDF + Thumbnail + infoPdf
-
-    Steps:
-    1. Upload FSE screenshot
-    2. PaddleOCR extracts text
-    3. ocr_to_schema structures data
-    4. fill_template fills Word template → PDF
-    5. Thumbnail generated
-    6. PDF saved in EDM path based on patient IPP
-    7. infoPdf updated
     """
     try:
         if not ocr_engine:
             raise HTTPException(status_code=500, detail="OCR engine not initialized")
 
-        import uuid
+        # Validate file type
+        allowed_extensions = {'.pdf', '.jpg', '.jpeg', '.png'}
+        file_ext = Path(file.filename).suffix.lower() if file.filename else ''
+        if file_ext not in allowed_extensions:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_ext}. Use /process-zip for ZIP files.")
+
         content = await file.read()
-        file_ext = Path(file.filename).suffix.lower() if file.filename else '.jpg'
         unique_id = str(uuid.uuid4())[:8]
         temp_path = os.path.join(temp_dir, f"upload_{unique_id}{file_ext}")
 
@@ -323,42 +321,41 @@ async def parse_and_generate(
 
         image_path = None
         try:
-            # Step 1: OCR
             logger.info(f"Running OCR on {file.filename}")
             ocr_text_lines, ocr_text, ocr_results_with_conf, image_path = run_ocr_on_file(
                 temp_path, file_ext, unique_id
             )
             logger.info(f"OCR extracted {len(ocr_text_lines)} lines")
 
-            # Step 2: Structure data
             extraction_data = extract_schema_from_ocr(ocr_results_with_conf, ocr_text)
 
-            # Step 3: Determine paths
             center_info = get_center_info()
             backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             sys.path.insert(0, backend_dir)
             from fill_template import fill_and_convert_to_pdf
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(current_dir)
+            template_path = os.path.join(project_root, "templates", "prescription", "Ordonnance_Template_vierge.docx")
 
-            # FSE number from OCR (e.g. "553381") — fallback to unique_id
+            logger.info(f"Looking for template at: {template_path}")
+            if not os.path.exists(template_path):
+                logger.error(f"Template not found at {template_path}")
+                raise HTTPException(status_code=500, detail=f"Template not found: {template_path}")
+
             fse_number = str(extraction_data.get("fse_number") or unique_id)
-
-            # IPP from OCR (patient number in Galaxie) — fallback to fse_number
             ipp = str(extraction_data.get("patient", {}).get("ipp") or
                       extraction_data.get("ipp") or fse_number)
 
-            # Build EDM directory: EDM_BASE_PATH / IPP_path
             edm_dir = get_edm_dir(ipp, edm_base_path)
             os.makedirs(edm_dir, exist_ok=True)
             os.makedirs(os.path.join(edm_dir, "thumbnails"), exist_ok=True)
             logger.info(f"EDM directory: {edm_dir}")
 
-            # PDF name: Ordonnance_{FINESS}_{FSE_numero}.pdf
-            pdf_filename  = f"Ordonnance_{finess}_{fse_number}.pdf"
-            jpg_filename  = f"Ordonnance_{finess}_{fse_number}.jpg"
-            pdf_output    = os.path.join(edm_dir, pdf_filename)
+            pdf_filename = f"Ordonnance_{finess}_{fse_number}.pdf"
+            jpg_filename = f"Ordonnance_{finess}_{fse_number}.jpg"
+            pdf_output = os.path.join(edm_dir, pdf_filename)
             thumbnail_path = os.path.join(edm_dir, "thumbnails", jpg_filename)
 
-            # Step 4: Fill template → PDF
             def generate_pdf_sync():
                 return fill_and_convert_to_pdf(
                     extraction_data=extraction_data,
@@ -366,25 +363,22 @@ async def parse_and_generate(
                     center_info=center_info,
                     finess=finess,
                     city=city,
+                    template_path=template_path,
                 )
 
             pdf_path = await asyncio.get_event_loop().run_in_executor(None, generate_pdf_sync)
             logger.info(f"✅ PDF generated: {pdf_path}")
 
-            # Step 5: Create thumbnail
             try:
                 from prescription_generator import create_thumbnail
-
                 def create_thumb_sync():
                     return create_thumbnail(pdf_path, thumbnail_path)
-
                 await asyncio.get_event_loop().run_in_executor(None, create_thumb_sync)
                 logger.info(f"✅ Thumbnail created: {thumbnail_path}")
             except Exception as e:
                 logger.warning(f"⚠️ Thumbnail creation failed (non-blocking): {e}")
                 thumbnail_path = None
 
-            # Step 6: Update infoPdf
             update_info_pdf(edm_dir, pdf_filename, jpg_filename)
 
             return PrescriptionResponse(
@@ -448,6 +442,129 @@ async def generate_prescription_endpoint(request: PrescriptionRequest):
 
     except Exception as e:
         logger.error(f"Prescription generation failed: {str(e)}")
+        return PrescriptionResponse(
+            success=False,
+            message=f"Erreur: {str(e)}",
+            error=str(e)
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ZIP PROCESSING ENDPOINT
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/process-zip", response_model=PrescriptionResponse)
+async def process_zip(
+    file: UploadFile = File(...),
+    finess: str = CENTER_FINESS,
+    city: str = CENTER_CITY,
+    edm_base_path: str = EDM_BASE_PATH,
+):
+    """
+    Process a ZIP file containing multiple frames (images/PDFs).
+    Extracts all images, runs OCR on each, combines results, then generates a single prescription PDF.
+    """
+    logger.info("=== Entered /process-zip ===")
+    try:
+        if not ocr_engine:
+            raise HTTPException(status_code=500, detail="OCR engine not initialized")
+
+        # Create a temporary directory for extraction
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, "upload.zip")
+            with open(zip_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+
+            # Extract ZIP
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(tmpdir)
+
+            # Gather all image files (recursively)
+            image_extensions = {'.jpg', '.jpeg', '.png', '.pdf'}
+            image_paths = []
+            for root, dirs, files in os.walk(tmpdir):
+                for fname in files:
+                    ext = os.path.splitext(fname)[1].lower()
+                    if ext in image_extensions:
+                        image_paths.append(os.path.join(root, fname))
+
+            if not image_paths:
+                raise HTTPException(status_code=400, detail="No images or PDFs found in ZIP")
+
+            logger.info(f"Found {len(image_paths)} image/PDF files in ZIP")
+
+            # Combine OCR results from all frames
+            all_ocr_results = []
+            for idx, img_path in enumerate(image_paths):
+                unique_id = str(uuid.uuid4())[:8]
+                file_ext = os.path.splitext(img_path)[1].lower()
+                logger.info(f"Processing frame {idx+1}/{len(image_paths)}: {os.path.basename(img_path)}")
+                _, _, ocr_results, _ = run_ocr_on_file(img_path, file_ext, unique_id)
+                if ocr_results:
+                    all_ocr_results.extend(ocr_results)
+                    logger.info(f"  -> {len(ocr_results)} OCR lines extracted")
+                else:
+                    logger.warning(f"  -> No OCR results from {img_path}")
+
+            if not all_ocr_results:
+                raise HTTPException(status_code=400, detail="No OCR text detected in any frame")
+
+            extraction_data = extract_schema_from_ocr(all_ocr_results, "")
+            logger.info(f"Extraction data keys: {list(extraction_data.keys())}")
+
+            fse_number = str(extraction_data.get("fse_number") or str(uuid.uuid4())[:8])
+            ipp = str(extraction_data.get("patient", {}).get("ipp") or
+                      extraction_data.get("ipp") or fse_number)
+
+            center_info = get_center_info()
+            from fill_template import fill_and_convert_to_pdf
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(current_dir)
+            template_path = os.path.join(project_root, "templates", "prescription", "Ordonnance_Template_vierge.docx")
+            if not os.path.exists(template_path):
+                raise HTTPException(status_code=500, detail=f"Template not found: {template_path}")
+
+            edm_dir = get_edm_dir(ipp, edm_base_path)
+            os.makedirs(edm_dir, exist_ok=True)
+            os.makedirs(os.path.join(edm_dir, "thumbnails"), exist_ok=True)
+
+            pdf_filename = f"Ordonnance_{finess}_{fse_number}.pdf"
+            jpg_filename = f"Ordonnance_{finess}_{fse_number}.jpg"
+            pdf_output = os.path.join(edm_dir, pdf_filename)
+            thumbnail_path = os.path.join(edm_dir, "thumbnails", jpg_filename)
+
+            def generate_pdf_sync():
+                return fill_and_convert_to_pdf(
+                    extraction_data=extraction_data,
+                    output_pdf_path=pdf_output,
+                    center_info=center_info,
+                    finess=finess,
+                    city=city,
+                    template_path=template_path,
+                )
+            pdf_path = await asyncio.get_event_loop().run_in_executor(None, generate_pdf_sync)
+            logger.info(f"✅ PDF generated from ZIP: {pdf_path}")
+
+            try:
+                from prescription_generator import create_thumbnail
+                await asyncio.get_event_loop().run_in_executor(None, create_thumbnail, pdf_path, thumbnail_path)
+                logger.info(f"✅ Thumbnail created: {thumbnail_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Thumbnail creation failed: {e}")
+                thumbnail_path = None
+
+            update_info_pdf(edm_dir, pdf_filename, jpg_filename)
+
+            return PrescriptionResponse(
+                success=True,
+                message=f"Prescription générée avec succès à partir de {len(image_paths)} frames",
+                pdf_path=pdf_path,
+                thumbnail_path=thumbnail_path,
+                edm_path=edm_dir
+            )
+
+    except Exception as e:
+        logger.error(f"process-zip failed: {str(e)}")
         return PrescriptionResponse(
             success=False,
             message=f"Erreur: {str(e)}",
