@@ -1,3 +1,8 @@
+import sys
+if sys.platform == 'win32':
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 """
 Database configuration and connection management
 """
@@ -13,7 +18,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:pyg201223@localh
 
 # Convert postgresql:// to postgresql+asyncpg:// for async support
 ASYNC_DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
-
+ASYNC_DATABASE_URL = ASYNC_DATABASE_URL + "?ssl=disable"
 # Create async engine
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
@@ -84,4 +89,5 @@ async def close_db():
     """
     await async_engine.dispose()
     logger.info("🔄 Database connections closed")
+
 

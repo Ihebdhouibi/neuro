@@ -16,7 +16,20 @@ async def create_document(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new document record"""
-    return await crud.create_document(db, document)
+    db_doc = await crud.create_document(db, document)
+    return schemas.DocumentResponse(
+        id=db_doc.id,
+        filename=db_doc.filename,
+        file_type=db_doc.file_type,
+        task_type=db_doc.task_type,
+        content=db_doc.content,
+        metadata=db_doc.doc_metadata,
+        output_path=db_doc.output_path,
+        status=db_doc.status,
+        error_message=db_doc.error_message,
+        created_at=db_doc.created_at,
+        updated_at=db_doc.updated_at,
+    )
 
 @router.get("/documents", response_model=List[schemas.DocumentResponse])
 async def get_documents(
@@ -27,7 +40,21 @@ async def get_documents(
 ):
     """Get list of documents"""
     documents = await crud.get_documents(db, skip=skip, limit=limit, status=status)
-    return documents
+    return [
+        schemas.DocumentResponse(
+            id=doc.id,
+            filename=doc.filename,
+            file_type=doc.file_type,
+            task_type=doc.task_type,
+            content=doc.content,
+            metadata=doc.doc_metadata,
+            output_path=doc.output_path,
+            status=doc.status,
+            error_message=doc.error_message,
+            created_at=doc.created_at,
+            updated_at=doc.updated_at,
+        ) for doc in documents
+    ]
 
 @router.get("/documents/{document_id}", response_model=schemas.DocumentResponse)
 async def get_document(
@@ -38,7 +65,19 @@ async def get_document(
     document = await crud.get_document(db, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    return document
+    return schemas.DocumentResponse(
+        id=document.id,
+        filename=document.filename,
+        file_type=document.file_type,
+        task_type=document.task_type,
+        content=document.content,
+        metadata=document.doc_metadata,
+        output_path=document.output_path,
+        status=document.status,
+        error_message=document.error_message,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+    )
 
 @router.patch("/documents/{document_id}", response_model=schemas.DocumentResponse)
 async def update_document(
@@ -50,7 +89,19 @@ async def update_document(
     document = await crud.update_document(db, document_id, document_update)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    return document
+    return schemas.DocumentResponse(
+        id=document.id,
+        filename=document.filename,
+        file_type=document.file_type,
+        task_type=document.task_type,
+        content=document.content,
+        metadata=document.doc_metadata,
+        output_path=document.output_path,
+        status=document.status,
+        error_message=document.error_message,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+    )
 
 @router.delete("/documents/{document_id}", response_model=schemas.MessageResponse)
 async def delete_document(
@@ -228,4 +279,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             status_code=503,
             detail=f"Database connection failed: {str(e)}"
         )
+
+
+
+
 

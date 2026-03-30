@@ -23,8 +23,13 @@ class DocumentUpdate(BaseModel):
     status: Optional[str] = None
     error_message: Optional[str] = None
 
-class DocumentResponse(DocumentBase):
+class DocumentResponse(BaseModel):
     id: int
+    filename: str
+    file_type: str
+    task_type: str
+    content: Optional[str] = None
+    metadata: Optional[dict] = None
     output_path: Optional[str] = None
     status: str
     error_message: Optional[str] = None
@@ -33,6 +38,25 @@ class DocumentResponse(DocumentBase):
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        if hasattr(obj, 'doc_metadata'):
+            data = {
+                "id": obj.id,
+                "filename": obj.filename,
+                "file_type": obj.file_type,
+                "task_type": obj.task_type,
+                "content": obj.content,
+                "metadata": obj.doc_metadata,
+                "output_path": obj.output_path,
+                "status": obj.status,
+                "error_message": obj.error_message,
+                "created_at": obj.created_at,
+                "updated_at": obj.updated_at,
+            }
+            return cls(**data)
+        return super().model_validate(obj, **kwargs)
 
 # User Schemas
 class UserBase(BaseModel):

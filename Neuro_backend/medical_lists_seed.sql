@@ -1,0 +1,23 @@
+INSERT INTO medical_lists (code, category, label, price) VALUES
+('AMY 30', 'BILANS ORTHOPTIQUES', 'Bilan orthoptique des deficiences visuelles basse vision', 78.00),
+('AMY 7', 'BILANS ORTHOPTIQUES', 'Bilan orthoptique', 18.20),
+('AMY 8', 'REEDUCATION', 'Seance de reeducation orthoptique', 20.80),
+('AMY 8,7', 'REEDUCATION', 'Seance de reeducation orthoptique complexe', 22.62),
+('AMY 10', 'REEDUCATION', 'Seance de reeducation orthoptique longue', 26.00),
+('AMY 15', 'REEDUCATION', 'Seance de reeducation orthoptique tres longue', 39.00),
+('AMY 20', 'REEDUCATION', 'Seance de reeducation orthoptique specialisee', 52.00),
+('AMY 30,5', 'BILANS ORTHOPTIQUES', 'Bilan des consequences neuro-ophtalmologiques', 79.30),
+('AMY 14,5', 'BILANS ORTHOPTIQUES', 'Bilan des desequilibres vision binoculaire', 37.70),
+('AMY 15,5', 'BILANS ORTHOPTIQUES', 'Bilan amblyopie', 40.30),
+('AMY 19,2', 'REEDUCATION', 'Reeducation deficience visuelle plus de 16 ans 45mn', 49.92),
+('AMY 13,2', 'REEDUCATION', 'Reeducation deficience visuelle 16 ans et moins 30mn', 34.32),
+('AMY 7,7', 'REEDUCATION', 'Traitement strabisme serie vingt seances', 20.02),
+('AMY 4', 'REEDUCATION', 'Traitement heterophories serie vingt seances', 10.40),
+('AMY 11,5', 'ACTES AVEC ENREGISTREMENTS', 'Perimetrie sans mesure de seuil', 29.90),
+('AMY 12,3', 'ACTES AVEC ENREGISTREMENTS', 'Perimetrie avec mesure de seuil', 31.98),
+('AMY 9', 'ACTES AVEC ENREGISTREMENTS', 'Courbe adaptation obscurite', 23.40),
+('AMY 6', 'ACTES AVEC ENREGISTREMENTS', 'Exploration sens chromatique', 15.60),
+('AMY 6,7', 'ACTES AVEC ENREGISTREMENTS', 'Depistage retinopathie diabetique avec telemission', 17.42),
+('AMY 6,1', 'ACTES AVEC ENREGISTREMENTS', 'Depistage retinopathie diabetique sans telemission', 15.86),
+('AMY 8,4', 'DEPISTAGE ENFANTS', 'Depistage troubles refraction enfants 30 mois-5 ans', 21.84)
+ON CONFLICT (code) DO NOTHING;
