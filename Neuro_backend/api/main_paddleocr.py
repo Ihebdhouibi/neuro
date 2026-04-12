@@ -157,10 +157,11 @@ def initialize_ocr():
         try:
             from paddleocr import PaddleOCR
             ocr_engine = PaddleOCR(
-                use_angle_cls=True,
-                lang='fr',
-                use_gpu=False,
-                show_log=False
+                use_textline_orientation=True,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                text_detection_model_name='PP-OCRv5_mobile_det',
+                text_recognition_model_name='PP-OCRv5_mobile_rec',
             )
             logger.info("✅ PaddleOCR initialized successfully")
         except Exception as e:
