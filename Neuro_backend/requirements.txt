@@ -1,48 +1,48 @@
 # ============================================
-# CLEANED REQUIREMENTS - PaddleOCR Only
+# CLEANED REQUIREMENTS - PaddleOCR 3.2.x
 # ============================================
 
 # Core Web Framework
-fastapi==0.116.1
-uvicorn==0.35.0
-python-multipart==0.0.20
-python-dotenv==1.1.1
-pydantic==2.11.7
-starlette==0.47.2
+fastapi>=0.115,<1
+uvicorn>=0.34,<1
+python-multipart>=0.0.18
+python-dotenv>=1.1,<2
+pydantic>=2.10,<3
 
 # CORS & HTTP
-httpx==0.28.1
-requests==2.32.4
+httpx>=0.28,<1
+requests>=2.32,<3
 
 # Database (PostgreSQL)
-SQLAlchemy==2.0.43
-psycopg2-binary==2.9.9
-asyncpg==0.30.0
-alembic==1.14.0
+SQLAlchemy>=2.0,<3
+psycopg2-binary>=2.9,<3
+asyncpg>=0.30,<1
+alembic>=1.14,<2
 
-# OCR - PaddleOCR
-paddleocr==2.9.2
-paddlepaddle==3.1.0
+# OCR - PaddleOCR 3.2.x
+paddleocr==3.2.0
+paddlepaddle>=3.1,<4
 
 # Image Processing
-Pillow==11.3.0
-opencv-python==4.11.0.86
-numpy>=1.26.0
+Pillow>=12,<13
+opencv-python>=4.10,<5
+numpy>=1.26,<3
 
 # PDF Processing
-PyMuPDF==1.24.14
-pdf2image==1.17.0
+PyMuPDF>=1.24,<2
+pdf2image>=1.17,<2
+
+# Template filling
+python-docx>=1.1,<2
 
 # OpenAI API (for extraction fallback)
-openai==1.88.0
+openai>=1.50,<2
 
 # Utilities
-loguru==0.7.3
-python-dateutil==2.9.0.post0
-click==8.2.1
-pydantic-settings==2.7.1
+loguru>=0.7,<1
+python-dateutil>=2.9,<3
+pydantic-settings>=2.7,<3
 
 # Development
-pytest==8.3.2
-pytest-asyncio==0.25.5
-httpx==0.28.1  # for testing
+pytest>=8,<9
+pytest-asyncio>=0.25,<1
