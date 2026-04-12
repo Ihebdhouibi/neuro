@@ -1,14 +1,15 @@
 import { app, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { initLogger } from './logger'
+import log from './logger'
 import { createAppWindow } from './app'
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
+// Initialize file logging before anything else
+initLogger()
+
 app.whenReady().then(() => {
-  // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
-  // Create app window
+  log.info('Application ready — creating main window')
   createAppWindow()
 
   // Default open or close DevTools by F12 in development
