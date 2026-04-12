@@ -6,6 +6,7 @@ Simplified version for window capture screenshot processing
 import zipfile
 import shutil
 import os
+import sys
 import tempfile
 import uuid
 from typing import Optional
@@ -15,9 +16,15 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from datetime import datetime
 
-load_dotenv(r"C:/Users/hp/Downloads/neuro/Neuro_backend/.env")
-print("EDM_BASE_PATH from env:", os.getenv("EDM_BASE_PATH"))
-print("CENTER_FINESS from env:", os.getenv("CENTER_FINESS"))
+# ── Resolve paths relative to this file (works in dev and bundled installs) ──
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BACKEND_DIR.parent
+
+# Load .env from backend root (next to api/), fallback to project root
+_env_path = BACKEND_DIR / ".env"
+if not _env_path.exists():
+    _env_path = PROJECT_ROOT / ".env"
+load_dotenv(str(_env_path))
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -26,9 +33,33 @@ from tempfile import gettempdir
 from loguru import logger
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-import sys
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# ── Logging configuration ────────────────────────────────────────────────────
+# Determine log directory: NEUROX_LOG_DIR env var → {project_root}/logs
+LOG_DIR = Path(os.getenv("NEUROX_LOG_DIR", str(PROJECT_ROOT / "logs")))
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Remove default stderr handler and re-add with consistent format
+logger.remove()
+logger.add(
+    sys.stderr,
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level:<8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+)
+logger.add(
+    str(LOG_DIR / "backend_{time:YYYY-MM-DD}.log"),
+    rotation="10 MB",
+    retention="30 days",
+    compression="zip",
+    level=os.getenv("LOG_LEVEL", "DEBUG"),
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {name}:{function}:{line} - {message}",
+    encoding="utf-8",
+)
+
+logger.info(f"Backend log directory: {LOG_DIR}")
+logger.info(f"Environment file: {_env_path} (exists={_env_path.exists()})")
+
+sys.path.append(str(BACKEND_DIR))
 from database import init_db, close_db
 
 # ── Center config from .env ──────────────────────────────────────────────────
