@@ -1,5 +1,5 @@
 ; ===========================================================================
-; NeuroX Offline Installer — Inno Setup Script
+; NeuroX Offline Installer - Inno Setup Script
 ; ===========================================================================
 ; Packages the complete NeuroX application for offline Windows installation:
 ;   - Electron frontend (win-unpacked)
@@ -42,7 +42,7 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 ; Require admin for PostgreSQL service registration
 PrivilegesRequired=admin
-; Setup logging — written to the install directory
+; Setup logging - written to the install directory
 SetupLogging=yes
 ; Minimum Windows 10
 MinVersion=10.0
@@ -51,7 +51,6 @@ UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\frontend\{#MyAppExeName}
 ; Architecture
 ArchitecturesAllowed=x64compatible
-ArchitecturesInstallMode=x64compatible
 ; Show installation progress in detail
 ShowLanguageDialog=auto
 WizardStyle=modern
@@ -61,8 +60,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "french";  MessagesFile: "compiler:Languages\French.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
-Name: "startmenuicon"; Description: "Create a Start Menu shortcut"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "startmenuicon"; Description: "Create a Start Menu shortcut"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
 ; Frontend (Electron app)
@@ -127,7 +126,7 @@ Type: filesandordirs; Name: "{app}\backend_src\__pycache__"
 Type: filesandordirs; Name: "{app}\backend_src\api\__pycache__"
 
 [Code]
-// ─── Pascal Script: Installation logging & validation ─────────────────────
+// --- Pascal Script: Installation logging & validation ---------------------
 var
   InstallLog: string;
 
@@ -182,18 +181,18 @@ end;
 // Prevent installation if not enough disk space (need ~2 GB)
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
-  FreeSpace: Int64;
+  FreeMB, TotalMB: Cardinal;
 begin
   Result := True;
   if CurPageID = wpSelectDir then
   begin
-    GetSpaceOnDisk(ExpandConstant('{app}'), True, FreeSpace, FreeSpace);
-    if FreeSpace < 2147483648 then  // 2 GB in bytes
+    GetSpaceOnDisk(ExpandConstant('{app}'), True, FreeMB, TotalMB);
+    if FreeMB < 2048 then  // 2 GB in megabytes
     begin
       MsgBox('Insufficient disk space. NeuroX requires at least 2 GB of free space.', mbError, MB_OK);
       Result := False;
     end;
     LogInstall('Selected install directory: ' + ExpandConstant('{app}'));
-    LogInstall('Free disk space: ' + IntToStr(FreeSpace div 1048576) + ' MB');
+    LogInstall('Free disk space: ' + IntToStr(FreeMB) + ' MB');
   end;
 end;
