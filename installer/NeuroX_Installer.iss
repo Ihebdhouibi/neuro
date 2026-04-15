@@ -182,17 +182,23 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   FreeMB, TotalMB: Cardinal;
+  DriveRoot: string;
 begin
   Result := True;
   if CurPageID = wpSelectDir then
   begin
-    GetSpaceOnDisk(ExpandConstant('{app}'), True, FreeMB, TotalMB);
-    if FreeMB < 2048 then  // 2 GB in megabytes
+    // GetSpaceOnDisk requires a drive root (e.g. 'C:\'), not a full path
+    DriveRoot := ExtractFileDrive(ExpandConstant('{app}')) + '\';
+    if GetSpaceOnDisk(DriveRoot, True, FreeMB, TotalMB) then
     begin
-      MsgBox('Insufficient disk space. NeuroX requires at least 2 GB of free space.', mbError, MB_OK);
-      Result := False;
+      if FreeMB < 2048 then  // 2 GB in megabytes
+      begin
+        MsgBox('Insufficient disk space. NeuroX requires at least 2 GB of free space.', mbError, MB_OK);
+        Result := False;
+      end;
     end;
     LogInstall('Selected install directory: ' + ExpandConstant('{app}'));
+    LogInstall('Drive root: ' + DriveRoot);
     LogInstall('Free disk space: ' + IntToStr(FreeMB) + ' MB');
   end;
 end;
