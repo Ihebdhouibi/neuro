@@ -70,31 +70,38 @@ export async function startBackend(): Promise<void> {
 
   // Option 1: PyInstaller-built backend exe
   const backendExe = join(installDir, 'backend', 'neurox_backend.exe')
-  // Option 2: Embedded Python running source
+  // Option 2: Embedded Python running source (installed layout: backend_src/)
   const pythonExe = join(installDir, 'python', 'python.exe')
-  const backendScript = join(installDir, 'Neuro_backend', 'api', 'main_paddleocr.py')
-  // Option 3: Dev venv
+  const backendScriptInstalled = join(installDir, 'backend_src', 'api', 'main_paddleocr.py')
+  // Option 3: Dev venv (dev layout: Neuro_backend/)
   const devPython = join(installDir, 'Neuro_backend', 'venv', 'Scripts', 'python.exe')
+  const backendScriptDev = join(installDir, 'Neuro_backend', 'api', 'main_paddleocr.py')
 
   let cmd: string
   let args: string[]
-  const env = { ...process.env, NEUROX_LOG_DIR: join(installDir, 'logs') }
+  const env: Record<string, string> = {
+    ...process.env as Record<string, string>,
+    NEUROX_LOG_DIR: join(installDir, 'logs'),
+    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://postgres@localhost:5432/neurox',
+    PADDLEX_HOME: join(installDir, 'models'),
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True',
+  }
 
   if (existsSync(backendExe)) {
     cmd = backendExe
     args = []
     log.info(`Starting backend (bundled exe): ${cmd}`)
-  } else if (existsSync(pythonExe) && existsSync(backendScript)) {
+  } else if (existsSync(pythonExe) && existsSync(backendScriptInstalled)) {
     cmd = pythonExe
-    args = [backendScript]
+    args = [backendScriptInstalled]
     log.info(`Starting backend (embedded python): ${cmd} ${args.join(' ')}`)
-  } else if (existsSync(devPython) && existsSync(backendScript)) {
+  } else if (existsSync(devPython) && existsSync(backendScriptDev)) {
     cmd = devPython
-    args = [backendScript]
+    args = [backendScriptDev]
     log.info(`Starting backend (dev venv): ${cmd} ${args.join(' ')}`)
   } else {
     log.warn('No backend executable found — backend must be started manually')
-    log.warn(`Searched: ${backendExe}, ${pythonExe}, ${devPython}`)
+    log.warn(`Searched: ${backendExe}, ${pythonExe} + ${backendScriptInstalled}, ${devPython} + ${backendScriptDev}`)
     return
   }
 
