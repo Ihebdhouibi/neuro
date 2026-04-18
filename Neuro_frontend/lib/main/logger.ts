@@ -9,7 +9,7 @@ import { join } from 'path'
 export function initLogger(): void {
   const logDir =
     process.env['NEUROX_LOG_DIR'] ||
-    (app.isPackaged ? join(app.getPath('exe'), '..', 'logs') : join(app.getAppPath(), '..', 'logs'))
+    (app.isPackaged ? join(app.getPath('exe'), '..', '..', 'logs') : join(app.getAppPath(), '..', 'logs'))
 
   log.transports.file.resolvePathFn = () => join(logDir, 'frontend.log')
   log.transports.file.maxSize = 10 * 1024 * 1024 // 10 MB
