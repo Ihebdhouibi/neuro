@@ -43,3 +43,26 @@ logs/
 # OS junk
 Thumbs.db
 .DS_Store
+
+# Temp/build artifacts
+_asar_staging/
+_asar_check/
+_asar_verify/
+Neuro_frontend/_asar_staging/
+Neuro_backend/docs/
+Neuro_backend/_legacy/
+
+# Large media/data files
+*.mp4
+*.zip
+Neuro_backend/video_analysis/frames/
+Neuro_backend/video_analysis/frames.zip
+
+# Working docs at root
+*.docx
+*.xlsx
+*.jpeg
+*.pdf
+*.ini
+description du projet.txt
+onednn_instruction.cc

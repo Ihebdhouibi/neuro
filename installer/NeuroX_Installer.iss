@@ -82,6 +82,9 @@ Source: "{#BundleDir}\pgsql\*"; DestDir: "{app}\pgsql"; Flags: ignoreversion rec
 ; Backend source code
 Source: "{#BundleDir}\backend_src\*"; DestDir: "{app}\backend_src"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; Visual C++ Redistributable (required by PostgreSQL)
+Source: "{#BundleDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall
+
 ; Installer scripts
 Source: "..\installer\setup_neurox.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\installer\uninstall_cleanup.bat"; DestDir: "{app}"; Flags: ignoreversion
@@ -99,6 +102,12 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\frontend\{#MyAppExeName}"; Workin
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
 [Run]
+; Install Visual C++ Redistributable (required by PostgreSQL)
+Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; \
+    StatusMsg: "Installing Visual C++ Runtime..."; \
+    Flags: waituntilterminated; \
+    Check: VCRedistNeedsInstall
+
 ; Post-install setup: install pip packages, create database, generate launcher
 Filename: "{cmd}"; Parameters: "/c ""{app}\setup_neurox.bat"" ""{app}"""; \
     StatusMsg: "Setting up Python environment and database..."; \
@@ -201,4 +210,18 @@ begin
     LogInstall('Drive root: ' + DriveRoot);
     LogInstall('Free disk space: ' + IntToStr(FreeMB) + ' MB');
   end;
+end;
+
+// Check if VC++ 2015-2022 Redistributable (x64) is already installed
+function VCRedistNeedsInstall: Boolean;
+var
+  Version: String;
+begin
+  Result := True; // assume we need to install
+  if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64', 'Version', Version) then
+  begin
+    LogInstall('VC++ Redistributable already installed: ' + Version);
+    Result := False; // already installed, skip
+  end else
+    LogInstall('VC++ Redistributable not found — will install');
 end;
