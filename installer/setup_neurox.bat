@@ -79,7 +79,13 @@ if exist "%PG_DATA%\PG_VERSION" (
 
 REM Fix data directory permissions so Electron app (non-admin) can access it
 call :log "Fixing data directory permissions..."
-icacls "%PG_DATA%" /grant Everyone:F /T /C >> "%LOG_FILE%" 2>&1
+REM Use SID-based principal names to avoid locale-dependent account names (e.g. French Windows)
+icacls "%PG_DATA%" /grant *S-1-5-32-545:(OI)(CI)M /grant *S-1-1-0:(OI)(CI)M /T /C >> "%LOG_FILE%" 2>&1
+if %ERRORLEVEL% neq 0 (
+    call :log "WARNING: Failed to update PostgreSQL data ACLs"
+) else (
+    call :log "PostgreSQL data ACLs updated"
+)
 
 REM Start PostgreSQL temporarily to create the database
 call :log "Starting PostgreSQL for database creation..."

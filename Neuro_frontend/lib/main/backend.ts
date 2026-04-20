@@ -90,8 +90,9 @@ export async function startBackend(): Promise<void> {
   // Add PaddleOCR DLL directory to PATH so libpaddle.pyd can load dependencies
   const paddleDllPath = join(installDir, 'python', 'Lib', 'site-packages', 'paddle', 'libs')
   if (existsSync(paddleDllPath)) {
-    env.PATH = `${paddleDllPath};${env.PATH || ''}`
-    log.info(`Added PaddleOCR DLL path to PATH: ${paddleDllPath}`)
+    const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path') || 'PATH'
+    env[pathKey] = `${paddleDllPath};${env[pathKey] || ''}`
+    log.info(`Added PaddleOCR DLL path to ${pathKey}: ${paddleDllPath}`)
   }
 
   if (existsSync(backendExe)) {
