@@ -87,6 +87,13 @@ export async function startBackend(): Promise<void> {
     PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True',
   }
 
+  // Add PaddleOCR DLL directory to PATH so libpaddle.pyd can load dependencies
+  const paddleDllPath = join(installDir, 'python', 'Lib', 'site-packages', 'paddle', 'libs')
+  if (existsSync(paddleDllPath)) {
+    env.PATH = `${paddleDllPath};${env.PATH || ''}`
+    log.info(`Added PaddleOCR DLL path to PATH: ${paddleDllPath}`)
+  }
+
   if (existsSync(backendExe)) {
     cmd = backendExe
     args = []

@@ -77,6 +77,10 @@ if exist "%PG_DATA%\PG_VERSION" (
     call :log "PostgreSQL initialized"
 )
 
+REM Fix data directory permissions so Electron app (non-admin) can access it
+call :log "Fixing data directory permissions..."
+icacls "%PG_DATA%" /grant Everyone:F /T /C >> "%LOG_FILE%" 2>&1
+
 REM Start PostgreSQL temporarily to create the database
 call :log "Starting PostgreSQL for database creation..."
 "%PG_BIN%\pg_ctl.exe" start -D "%PG_DATA%" -w -l "%LOG_DIR%\postgresql_setup.log" >> "%LOG_FILE%" 2>&1
