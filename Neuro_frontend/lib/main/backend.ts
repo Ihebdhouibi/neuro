@@ -24,7 +24,8 @@ function getInstallDir(): string {
 export async function startPostgres(): Promise<void> {
   const installDir = getInstallDir()
   const pgCtl = join(installDir, 'pgsql', 'bin', 'pg_ctl.exe')
-  const dataDir = join(installDir, 'pgsql', 'data')
+  const programData = process.env.ProgramData || process.env.PROGRAMDATA || 'C:\\ProgramData'
+  const dataDir = process.env.NEUROX_PG_DATA || join(programData, 'NeuroX', 'pgdata')
 
   if (!existsSync(pgCtl)) {
     log.warn(`PostgreSQL not found at ${pgCtl} — skipping (using system PostgreSQL or dev setup)`)
@@ -181,7 +182,8 @@ export function stopServices(): void {
   // Stop PostgreSQL gracefully
   const installDir = getInstallDir()
   const pgCtl = join(installDir, 'pgsql', 'bin', 'pg_ctl.exe')
-  const dataDir = join(installDir, 'pgsql', 'data')
+  const programData = process.env.ProgramData || process.env.PROGRAMDATA || 'C:\\ProgramData'
+  const dataDir = process.env.NEUROX_PG_DATA || join(programData, 'NeuroX', 'pgdata')
 
   if (existsSync(pgCtl)) {
     log.info('Stopping PostgreSQL...')

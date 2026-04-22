@@ -151,10 +151,39 @@ class PrescriptionResponse(BaseModel):
 # ── OCR engine ───────────────────────────────────────────────────────────────
 ocr_engine = None
 
+
+def _register_paddle_dll_dirs() -> None:
+    """On Windows + Python 3.8+, PATH is not used for loading C extension
+    dependencies. Paddle's own __init__ is supposed to register its libs
+    directory, but in embedded/packaged layouts it sometimes fails. We
+    pre-register every known candidate directory so libpaddle can import.
+    """
+    if sys.platform != "win32" or not hasattr(os, "add_dll_directory"):
+        return
+    import site as _site
+    candidates = []
+    try:
+        candidates.extend(_site.getsitepackages())
+    except Exception:
+        pass
+    candidates.append(str(Path(sys.executable).parent / "Lib" / "site-packages"))
+    seen = set()
+    for sp in candidates:
+        libs_dir = Path(sp) / "paddle" / "libs"
+        if libs_dir.exists() and str(libs_dir) not in seen:
+            try:
+                os.add_dll_directory(str(libs_dir))
+                seen.add(str(libs_dir))
+                logger.info(f"Registered paddle DLL dir: {libs_dir}")
+            except OSError as e:
+                logger.warning(f"Could not register paddle DLL dir {libs_dir}: {e}")
+
+
 def initialize_ocr():
     global ocr_engine
     if ocr_engine is None:
         try:
+            _register_paddle_dll_dirs()
             from paddleocr import PaddleOCR
             ocr_engine = PaddleOCR(
                 use_textline_orientation=True,
@@ -165,7 +194,9 @@ def initialize_ocr():
             )
             logger.info("✅ PaddleOCR initialized successfully")
         except Exception as e:
+            import traceback
             logger.error(f"Failed to initialize PaddleOCR: {e}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
             raise
     return ocr_engine
 

@@ -56,8 +56,13 @@ if exist "%MODELS_SRC%" (
 :pg_setup
 REM ── 3. Initialize PostgreSQL database ───────────────────────────────────────
 set "PG_BIN=%INSTALL_DIR%\pgsql\bin"
-set "PG_DATA=%INSTALL_DIR%\pgsql\data"
+REM Store PG data outside Program Files so non-admin users can write postmaster.pid
+if "%PROGRAMDATA%"=="" set "PROGRAMDATA=C:\ProgramData"
+set "PG_DATA=%PROGRAMDATA%\NeuroX\pgdata"
 set "PGPASSWORD=postgres"
+
+if not exist "%PROGRAMDATA%\NeuroX" mkdir "%PROGRAMDATA%\NeuroX" >> "%LOG_FILE%" 2>&1
+call :log "PostgreSQL data directory: %PG_DATA%"
 
 if not exist "%PG_BIN%\pg_ctl.exe" (
     call :log "PostgreSQL binaries not found — skipping database setup"
@@ -79,8 +84,8 @@ if exist "%PG_DATA%\PG_VERSION" (
 
 REM Fix data directory permissions so Electron app (non-admin) can access it
 call :log "Fixing data directory permissions..."
-REM Use SID-based principal names to avoid locale-dependent account names (e.g. French Windows)
-icacls "%PG_DATA%" /grant *S-1-5-32-545:(OI)(CI)M /grant *S-1-1-0:(OI)(CI)M /T /C >> "%LOG_FILE%" 2>&1
+REM Grant BUILTIN\Users (SID S-1-5-32-545) full control, locale-independent
+icacls "%PROGRAMDATA%\NeuroX" /grant *S-1-5-32-545:(OI)(CI)F /T /C >> "%LOG_FILE%" 2>&1
 if %ERRORLEVEL% neq 0 (
     call :log "WARNING: Failed to update PostgreSQL data ACLs"
 ) else (
@@ -134,10 +139,11 @@ set "LAUNCHER=%INSTALL_DIR%\NeuroX.bat"
     echo set "PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True"
     echo set "NEUROX_LOG_DIR=%%INSTALL_DIR%%logs"
     echo set "DATABASE_URL=postgresql://postgres@localhost:5432/neurox"
+    echo set "NEUROX_PG_DATA=%%PROGRAMDATA%%\NeuroX\pgdata"
     echo.
     echo REM Start PostgreSQL
     echo if exist "%%INSTALL_DIR%%pgsql\bin\pg_ctl.exe" ^(
-    echo     "%%INSTALL_DIR%%pgsql\bin\pg_ctl.exe" start -D "%%INSTALL_DIR%%pgsql\data" -w -l "%%INSTALL_DIR%%logs\postgresql.log"
+    echo     "%%INSTALL_DIR%%pgsql\bin\pg_ctl.exe" start -D "%%NEUROX_PG_DATA%%" -w -l "%%INSTALL_DIR%%logs\postgresql.log"
     echo ^)
     echo.
     echo REM Start the application
