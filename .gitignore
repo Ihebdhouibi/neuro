@@ -1,127 +1,68 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
 .Python
 venv/
-venv*/
+venv38/
 env/
-envs/
 ENV/
-env.bak/
-venv.bak/
-*.egg-info/
-.eggs/
 dist/
 build/
+*.egg-info/
 *.egg
 
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dist/
-out/
-.npm
-.yarn
+# PyInstaller / Nuitka
+*.spec
+*.exe
+*.onefile-build
+*.dist
+*.build
 
-# IDEs
+# Offline installer (large folders)
+wheels/
+*.whl
+NeuroX_Offline_Installer/wheels/
+NeuroX_Offline_Installer/*.exe
+NeuroX_Offline_Installer/backend_src/_internal/
+NeuroX_Offline_Installer/*.pyc
+installer/bundle/
+installer/output/
+
+# Logs and local config
+logs/
+*.log
+.env
+.env.local
+
+# IDE
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
+
+# OS junk
+Thumbs.db
 .DS_Store
-.history/
 
-# Logs
-*.log
-*.log.*
-slurm_logs/
+# Temp/build artifacts
+_asar_staging/
+_asar_check/
+_asar_verify/
+Neuro_frontend/_asar_staging/
+Neuro_backend/docs/
+Neuro_backend/_legacy/
 
-# Environment files
-.env
-.env.*
-!.env.example
-source.dev.env
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Documentation (as requested)
-docs/
-**/docs/
-
-# Video files (as requested)
-videos/
-**/videos/
-video_analysis/
-**/video_analysis/
+# Large media/data files
 *.mp4
-*.avi
-*.mov
-*.mkv
-*.flv
-*.wmv
-
-# Temporary & Debug files
-temp/
-tmp/
-tmp/
-debug/
-cli_debug/
-debug_utils/
-*.tmp
-*.bak
-bak/
-
-# Archives
-*.tar
-*.tar.gz
 *.zip
-*.rar
-*.7z
+Neuro_backend/video_analysis/frames/
+Neuro_backend/video_analysis/frames.zip
 
-# Office Documents (usually not versioned)
+# Working docs at root
 *.docx
-*.doc
 *.xlsx
-*.xls
-*.pptx
-*.ppt
+*.jpeg
 *.pdf
-
-# Jupyter
-*.ipynb
-.ipynb_checkpoints/
-
-# Coverage
-.coverage
-.coveragerc
-htmlcov/
-
-# Sphinx documentation
-_build/
-
-# Project specific
-ocr_demo/
-output/
-model_weight/
-bad_words/
-projects/web/node_modules
-projects/web/dist
-projects/web_demo/web_demo/static/
-
-# Keep example files
-!env.example.txt
-!*.example
-
-# Exclude specific root files
+*.ini
 description du projet.txt
 onednn_instruction.cc
-paddle_ocr_engine.py
-📋 📋 OFFICIAL TABLE OF AMY ORTHOPTIC PR.ini

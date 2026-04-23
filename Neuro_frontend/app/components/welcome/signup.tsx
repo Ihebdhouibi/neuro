@@ -156,23 +156,19 @@ export const SignUpLightMode = () => {
   };
 
   // Check if form is valid
-  const isFormValid = () => {
-    // Check required fields are not empty
-    if (!username.trim() || !password.trim() || !firstName.trim() || !lastName.trim()) {
-      return false;
-    }
-
-    // Check if there are any validation errors
-    const hasErrors = 
-      validateUsername(username) !== "" ||
-      validatePassword(password) !== "" ||
-      validateName(firstName, "First name") !== "" ||
-      validateName(lastName, "Last name") !== "" ||
-      validateEmail(email) !== "" ||
-      validatePhone(phone) !== "";
-
-    return !hasErrors && agreeToPolicy;
-  };
+  const isFormValid = (): boolean => {
+  if (!username.trim() || !password.trim() || !firstName.trim() || !lastName.trim()) {
+    return false;
+  }
+  const hasErrors =
+    validateUsername(username) !== "" ||
+    validatePassword(password) !== "" ||
+    validateName(firstName, "First name") !== "" ||
+    validateName(lastName, "Last name") !== "" ||
+    validateEmail(email) !== "" ||
+    validatePhone(phone) !== "";
+  return !hasErrors && agreeToPolicy;
+};
 
   const handleSignup = async () => {
     setError(null);

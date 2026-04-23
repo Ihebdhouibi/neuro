@@ -31,7 +31,7 @@ print(f"Test frame: {test_frame}\n")
 
 # Initialize PaddleOCR
 print("Initializing PaddleOCR...")
-ocr = PaddleOCR(lang='fr', use_gpu=False, show_log=False)
+ocr = PaddleOCR(lang='fr', use_textline_orientation=True)
 print("✅ Initialized\n")
 
 # Test 1: File path (string)

@@ -4,6 +4,7 @@ import appIcon from '@/resources/build/icon.png?asset'
 import { registerResourcesProtocol } from './protocols'
 import { registerWindowHandlers } from '@/lib/conveyor/handlers/window-handler'
 import { registerAppHandlers } from '@/lib/conveyor/handlers/app-handler'
+import log from './logger'
 
 export function createAppWindow(): void {
   registerResourcesProtocol()
@@ -72,9 +73,9 @@ export function createAppWindow(): void {
   // Handle failed page loads - fallback to built files if dev server fails
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     if (errorCode === -106 || errorCode === -105) { // ERR_CONNECTION_REFUSED or ERR_NAME_NOT_RESOLVED
-      console.error(`Failed to load ${validatedURL}: ${errorDescription}`)
+      log.error(`Failed to load ${validatedURL}: ${errorDescription}`)
       if (!app.isPackaged && validatedURL.includes('localhost')) {
-        console.log('Falling back to built files...')
+        log.warn('Falling back to built files...')
         mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
       }
     }
@@ -124,13 +125,13 @@ export function createAppWindow(): void {
         }
         
         if (i < maxRetries - 1) {
-          console.log(`Waiting for dev server at ${url}... (${i + 1}/${maxRetries})`)
+          log.info(`Waiting for dev server at ${url}... (${i + 1}/${maxRetries})`)
           await new Promise(resolve => setTimeout(resolve, retryDelay))
         }
       }
       
       // If server never became ready, try loading anyway (might work)
-      console.warn('Dev server check timed out, attempting to load anyway...')
+      log.warn('Dev server check timed out, attempting to load anyway...')
       mainWindow.loadURL(url)
     } else {
       mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
