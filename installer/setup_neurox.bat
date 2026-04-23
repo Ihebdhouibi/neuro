@@ -56,12 +56,15 @@ if exist "%MODELS_SRC%" (
 :pg_setup
 REM ── 3. Initialize PostgreSQL database ───────────────────────────────────────
 set "PG_BIN=%INSTALL_DIR%\pgsql\bin"
-REM Store PG data outside Program Files so non-admin users can write postmaster.pid
+REM Versioned data dir: prevents clashes with legacy PG data from previous installs.
+set "PG_EXPECTED_VERSION=17"
 if "%PROGRAMDATA%"=="" set "PROGRAMDATA=C:\ProgramData"
-set "PG_DATA=%PROGRAMDATA%\NeuroX\pgdata"
+set "PG_DATA=%PROGRAMDATA%\NeuroX\pgdata%PG_EXPECTED_VERSION%"
+set "PG_LEGACY_DATA=%PROGRAMDATA%\NeuroX\pgdata"
 set "PGPASSWORD=postgres"
 
 if not exist "%PROGRAMDATA%\NeuroX" mkdir "%PROGRAMDATA%\NeuroX" >> "%LOG_FILE%" 2>&1
+call :log "PostgreSQL expected major version: %PG_EXPECTED_VERSION%"
 call :log "PostgreSQL data directory: %PG_DATA%"
 
 if not exist "%PG_BIN%\pg_ctl.exe" (
@@ -69,9 +72,44 @@ if not exist "%PG_BIN%\pg_ctl.exe" (
     goto :create_db
 )
 
-REM Check if data directory already initialized
+REM Handle any legacy (unversioned) data dir from older NeuroX installs
+if exist "%PG_LEGACY_DATA%\PG_VERSION" (
+    set /p PG_LEGACY_VER=<"%PG_LEGACY_DATA%\PG_VERSION"
+    call :log "Found legacy data dir '%PG_LEGACY_DATA%' version !PG_LEGACY_VER!"
+    "%PG_BIN%\pg_ctl.exe" stop -D "%PG_LEGACY_DATA%" -m immediate >> "%LOG_FILE%" 2>&1
+    set "PG_LEGACY_BACKUP=%PROGRAMDATA%\NeuroX\pgdata_legacy_backup_%RANDOM%"
+    call :log "Moving legacy data to: !PG_LEGACY_BACKUP!"
+    move "%PG_LEGACY_DATA%" "!PG_LEGACY_BACKUP!" >> "%LOG_FILE%" 2>&1
+    if !ERRORLEVEL! neq 0 (
+        call :log "WARNING: move failed, deleting legacy dir instead"
+        rmdir /s /q "%PG_LEGACY_DATA%" >> "%LOG_FILE%" 2>&1
+    )
+)
+
+REM Check if expected data dir exists and has compatible version
 if exist "%PG_DATA%\PG_VERSION" (
-    call :log "PostgreSQL data directory already initialized"
+    set /p PG_DATA_VERSION=<"%PG_DATA%\PG_VERSION"
+    call :log "Existing data dir version: !PG_DATA_VERSION!"
+    if not "!PG_DATA_VERSION!"=="%PG_EXPECTED_VERSION%" (
+        call :log "Version !PG_DATA_VERSION! is incompatible with server %PG_EXPECTED_VERSION%"
+        "%PG_BIN%\pg_ctl.exe" stop -D "%PG_DATA%" -m immediate >> "%LOG_FILE%" 2>&1
+        set "PG_INCOMPAT_BACKUP=%PROGRAMDATA%\NeuroX\pgdata!PG_DATA_VERSION!_backup_%RANDOM%"
+        call :log "Moving incompatible data to: !PG_INCOMPAT_BACKUP!"
+        move "%PG_DATA%" "!PG_INCOMPAT_BACKUP!" >> "%LOG_FILE%" 2>&1
+        if !ERRORLEVEL! neq 0 (
+            call :log "WARNING: move failed, deleting incompatible dir instead"
+            rmdir /s /q "%PG_DATA%" >> "%LOG_FILE%" 2>&1
+        )
+        call :log "Initializing fresh PostgreSQL data directory..."
+        "%PG_BIN%\initdb.exe" -D "%PG_DATA%" -U postgres -E UTF8 --locale=C >> "%LOG_FILE%" 2>&1
+        if !ERRORLEVEL! neq 0 (
+            call :log "ERROR: PostgreSQL re-initialization failed"
+            goto :finish
+        )
+        call :log "PostgreSQL re-initialized on version %PG_EXPECTED_VERSION%"
+    ) else (
+        call :log "PostgreSQL data directory already initialized and compatible"
+    )
 ) else (
     call :log "Initializing PostgreSQL data directory..."
     "%PG_BIN%\initdb.exe" -D "%PG_DATA%" -U postgres -E UTF8 --locale=C >> "%LOG_FILE%" 2>&1
@@ -139,7 +177,7 @@ set "LAUNCHER=%INSTALL_DIR%\NeuroX.bat"
     echo set "PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True"
     echo set "NEUROX_LOG_DIR=%%INSTALL_DIR%%logs"
     echo set "DATABASE_URL=postgresql://postgres@localhost:5432/neurox"
-    echo set "NEUROX_PG_DATA=%%PROGRAMDATA%%\NeuroX\pgdata"
+    echo set "NEUROX_PG_DATA=%%PROGRAMDATA%%\NeuroX\pgdata17"
     echo.
     echo REM Start PostgreSQL
     echo if exist "%%INSTALL_DIR%%pgsql\bin\pg_ctl.exe" ^(

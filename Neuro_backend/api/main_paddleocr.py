@@ -7,6 +7,7 @@ import zipfile
 import shutil
 import os
 import sys
+import platform
 import tempfile
 import uuid
 from typing import Optional
@@ -152,6 +153,46 @@ class PrescriptionResponse(BaseModel):
 ocr_engine = None
 
 
+def _log_cpu_capabilities() -> dict:
+    """Log CPU instruction-set support (AVX, AVX2, SSE4.2 etc.).
+    PaddlePaddle's default Windows wheel is compiled with AVX; on CPUs or
+    VMs that do not expose AVX the native `libpaddle` DLL init routine fails.
+    """
+    info = {"avx": None, "avx2": None, "sse4_2": None, "source": None, "processor": platform.processor()}
+    # Try cpuinfo (best signal)
+    try:
+        import cpuinfo  # type: ignore
+        data = cpuinfo.get_cpu_info()
+        flags = set(data.get("flags", []))
+        info.update({
+            "avx": "avx" in flags,
+            "avx2": "avx2" in flags,
+            "sse4_2": "sse4_2" in flags,
+            "source": "py-cpuinfo",
+            "brand": data.get("brand_raw"),
+        })
+    except Exception:
+        # Fallback: Windows PowerShell WMI query for CPU flags is unreliable;
+        # use wmic for at least the CPU name and let paddle report AVX itself.
+        if sys.platform == "win32":
+            try:
+                import subprocess
+                out = subprocess.check_output(
+                    ["wmic", "cpu", "get", "Name,Caption,Description", "/format:list"],
+                    stderr=subprocess.DEVNULL, text=True, timeout=5,
+                )
+                info["source"] = "wmic"
+                info["wmic"] = out.strip().replace("\r", "")
+            except Exception as ex:
+                info["source"] = f"unavailable ({ex})"
+    logger.info(f"CPU capabilities: {info}")
+    if info["avx"] is False:
+        logger.warning(
+            "⚠️ CPU does NOT expose AVX. PaddlePaddle's default AVX build will fail to load."
+        )
+    return info
+
+
 def _register_paddle_dll_dirs() -> None:
     """On Windows + Python 3.8+, PATH is not used for loading C extension
     dependencies. Paddle's own __init__ is supposed to register its libs
@@ -183,6 +224,18 @@ def initialize_ocr():
     global ocr_engine
     if ocr_engine is None:
         try:
+            cpu_info = _log_cpu_capabilities()
+            # PaddlePaddle's default wheel requires AVX. On VMs / older CPUs
+            # without AVX, libpaddle.pyd fails to initialize and the whole
+            # paddle import blows up with a confusing NameError. Detect this
+            # early and bail out cleanly with a clear message.
+            if cpu_info.get("avx") is False:
+                raise RuntimeError(
+                    "CPU does not support AVX instructions; the bundled "
+                    "PaddlePaddle build cannot run on this machine. "
+                    "OCR will be disabled. Fix: ship a paddlepaddle-noavx "
+                    "wheel or run on a CPU/VM that exposes AVX."
+                )
             _register_paddle_dll_dirs()
             from paddleocr import PaddleOCR
             ocr_engine = PaddleOCR(
