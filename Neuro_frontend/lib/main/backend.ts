@@ -4,7 +4,6 @@ import { app } from 'electron'
 import { existsSync } from 'fs'
 import log from './logger'
 
-let pgProcess: ChildProcess | null = null
 let backendProcess: ChildProcess | null = null
 
 /** Resolve the installation root (where backend/, pgsql/, python/ live) */
@@ -34,7 +33,7 @@ export async function startPostgres(): Promise<void> {
 
   log.info(`Starting PostgreSQL: ${pgCtl} -D ${dataDir}`)
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const proc = spawn(pgCtl, ['start', '-D', dataDir, '-w', '-l', join(installDir, 'logs', 'postgresql.log')], {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
@@ -194,6 +193,5 @@ export function stopServices(): void {
     proc.on('close', (code) => {
       log.info(`PostgreSQL stopped (exit ${code})`)
     })
-    pgProcess = null
   }
 }
