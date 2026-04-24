@@ -220,32 +220,65 @@ def _register_paddle_dll_dirs() -> None:
                 logger.warning(f"Could not register paddle DLL dir {libs_dir}: {e}")
 
 
+def _resolve_model_dirs() -> dict:
+    """Resolve on-disk paths to PaddleOCR 2.x inference models.
+
+    Priority:
+      1. NEUROX_MODELS_DIR env var (set by installer launcher) / ocr
+      2. <install>/models/ocr next to the backend folder
+      3. None → PaddleOCR will fall back to its default downloads on first use
+    """
+    candidates = []
+    env = os.getenv("NEUROX_MODELS_DIR")
+    if env:
+        candidates.append(Path(env))
+    candidates.append(BACKEND_DIR.parent / "models" / "ocr")
+    candidates.append(PROJECT_ROOT / "models" / "ocr")
+    candidates.append(BACKEND_DIR / "models" / "ocr")
+
+    for base in candidates:
+        det = base / "det"
+        rec = base / "rec"
+        cls = base / "cls"
+        if det.exists() and rec.exists() and cls.exists():
+            logger.info(f"Using OCR models from: {base}")
+            return {
+                "det_model_dir": str(det),
+                "rec_model_dir": str(rec),
+                "cls_model_dir": str(cls),
+            }
+    logger.warning(
+        "⚠️ OCR model directory not found in bundle; PaddleOCR will download "
+        "models on first use (requires internet)."
+    )
+    return {}
+
+
 def initialize_ocr():
     global ocr_engine
     if ocr_engine is None:
         try:
             cpu_info = _log_cpu_capabilities()
-            # PaddlePaddle's default wheel requires AVX. On VMs / older CPUs
-            # without AVX, libpaddle.pyd fails to initialize and the whole
-            # paddle import blows up with a confusing NameError. Detect this
-            # early and bail out cleanly with a clear message.
+            # On CPUs without AVX, the standard paddlepaddle wheel fails to load
+            # (libpaddle.pyd init error → NameError). The installer detects this
+            # at install-time and installs paddlepaddle-noavx instead, so by the
+            # time we get here paddle should import cleanly. Keep the probe as
+            # a warning; the actual import will surface any remaining issue.
             if cpu_info.get("avx") is False:
-                raise RuntimeError(
-                    "CPU does not support AVX instructions; the bundled "
-                    "PaddlePaddle build cannot run on this machine. "
-                    "OCR will be disabled. Fix: ship a paddlepaddle-noavx "
-                    "wheel or run on a CPU/VM that exposes AVX."
+                logger.warning(
+                    "CPU does not expose AVX — relying on paddlepaddle-noavx "
+                    "wheel installed by the NeuroX installer."
                 )
             _register_paddle_dll_dirs()
             from paddleocr import PaddleOCR
+            model_dirs = _resolve_model_dirs()
             ocr_engine = PaddleOCR(
-                use_textline_orientation=True,
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False,
-                text_detection_model_name='PP-OCRv5_mobile_det',
-                text_recognition_model_name='PP-OCRv5_mobile_rec',
+                use_angle_cls=True,
+                lang="fr",
+                show_log=False,
+                **model_dirs,
             )
-            logger.info("✅ PaddleOCR initialized successfully")
+            logger.info("✅ PaddleOCR 2.x initialized successfully")
         except Exception as e:
             import traceback
             logger.error(f"Failed to initialize PaddleOCR: {e}")
