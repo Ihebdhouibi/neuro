@@ -108,8 +108,10 @@ Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /quiet /norestart"; \
     Flags: waituntilterminated; \
     Check: VCRedistNeedsInstall
 
-; Post-install setup: install pip packages, create database, generate launcher
-Filename: "{cmd}"; Parameters: "/c ""{app}\setup_neurox.bat"" ""{app}"""; \
+; Post-install setup: install pip packages, create database, generate launcher.
+; Invoke the .bat directly (no cmd.exe /c wrapper) to avoid the double-quote
+; parsing bug that breaks paths containing spaces like "Program Files (x86)".
+Filename: "{app}\setup_neurox.bat"; Parameters: """{app}"""; \
     StatusMsg: "Setting up Python environment and database..."; \
     Flags: runhidden waituntilterminated; \
     Description: "Configure NeuroX components"
@@ -122,8 +124,9 @@ Filename: "{app}\frontend\{#MyAppExeName}"; \
 
 [UninstallRun]
 ; Run cleanup before uninstall removes files
-Filename: "{cmd}"; Parameters: "/c ""{app}\uninstall_cleanup.bat"" ""{app}"""; \
-    Flags: runhidden waituntilterminated
+Filename: "{app}\uninstall_cleanup.bat"; Parameters: """{app}"""; \
+    Flags: runhidden waituntilterminated; \
+    RunOnceId: "NeuroXUninstallCleanup"
 
 [UninstallDelete]
 ; Clean up generated files not tracked by installer
