@@ -35,22 +35,23 @@ call :log "Installing Python packages from offline wheel cache..."
 if %ERRORLEVEL% neq 0 (
     call :log "WARNING: Some packages may not have installed correctly (exit code %ERRORLEVEL%)"
     call :log "Retrying with --no-deps for critical packages..."
-    for %%p in (fastapi uvicorn paddleocr paddlepaddle loguru sqlalchemy asyncpg) do (
+    for %%p in (fastapi uvicorn rapidocr-onnxruntime onnxruntime loguru sqlalchemy asyncpg) do (
         "%PYTHON%" -m pip install --no-index --find-links="%WHEELS%" %%p --no-warn-script-location >> "%LOG_FILE%" 2>&1
     )
 ) else (
     call :log "Python packages installed successfully"
 )
 
-REM ── 2. Copy PaddleOCR models to the right location ─────────────────────────
-set "MODELS_SRC=%INSTALL_DIR%\models"
-set "PADDLEX_HOME=%INSTALL_DIR%\models"
-
+REM ── 2. OCR models ──────────────────────────────────────────────────────────────
+REM RapidOCR ships its default PP-OCR ONNX models inside the wheel, so no
+REM separate model directory is required. If %INSTALL_DIR%\models\ocr exists
+REM with det.onnx / rec.onnx / cls.onnx files, the backend will use those
+REM instead (via the NEUROX_MODELS_DIR env var set in the launcher).
+set "MODELS_SRC=%INSTALL_DIR%\models\ocr"
 if exist "%MODELS_SRC%" (
-    call :log "PaddleOCR models directory: %MODELS_SRC%"
-    call :log "Models will be used from install directory (no download needed)"
+    call :log "Custom OCR models directory present: %MODELS_SRC%"
 ) else (
-    call :log "WARNING: Models directory not found — OCR will download models on first use"
+    call :log "No custom OCR models — using RapidOCR bundled defaults"
 )
 
 :pg_setup
@@ -173,8 +174,7 @@ set "LAUNCHER=%INSTALL_DIR%\NeuroX.bat"
     echo @echo off
     echo setlocal
     echo set "INSTALL_DIR=%%~dp0"
-    echo set "PADDLEX_HOME=%%INSTALL_DIR%%models"
-    echo set "PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True"
+    echo set "NEUROX_MODELS_DIR=%%INSTALL_DIR%%models\ocr"
     echo set "NEUROX_LOG_DIR=%%INSTALL_DIR%%logs"
     echo set "DATABASE_URL=postgresql://postgres@localhost:5432/neurox"
     echo set "NEUROX_PG_DATA=%%PROGRAMDATA%%\NeuroX\pgdata17"

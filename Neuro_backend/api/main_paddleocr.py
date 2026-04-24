@@ -150,83 +150,23 @@ class PrescriptionResponse(BaseModel):
     error: Optional[str] = None
 
 # ── OCR engine ───────────────────────────────────────────────────────────────
+# Using RapidOCR (ONNX Runtime backend) instead of PaddleOCR:
+#  - Runs on any x86_64 CPU (no AVX/AVX2 requirement).
+#  - Default PP-OCR models are bundled inside the rapidocr-onnxruntime wheel,
+#    so the engine works fully offline with no extra model downloads.
+#  - Override bundled models via NEUROX_MODELS_DIR (directory containing
+#    det.onnx / rec.onnx / cls.onnx) if a custom model set is shipped.
 ocr_engine = None
 
 
-def _log_cpu_capabilities() -> dict:
-    """Log CPU instruction-set support (AVX, AVX2, SSE4.2 etc.).
-    PaddlePaddle's default Windows wheel is compiled with AVX; on CPUs or
-    VMs that do not expose AVX the native `libpaddle` DLL init routine fails.
-    """
-    info = {"avx": None, "avx2": None, "sse4_2": None, "source": None, "processor": platform.processor()}
-    # Try cpuinfo (best signal)
-    try:
-        import cpuinfo  # type: ignore
-        data = cpuinfo.get_cpu_info()
-        flags = set(data.get("flags", []))
-        info.update({
-            "avx": "avx" in flags,
-            "avx2": "avx2" in flags,
-            "sse4_2": "sse4_2" in flags,
-            "source": "py-cpuinfo",
-            "brand": data.get("brand_raw"),
-        })
-    except Exception:
-        # Fallback: Windows PowerShell WMI query for CPU flags is unreliable;
-        # use wmic for at least the CPU name and let paddle report AVX itself.
-        if sys.platform == "win32":
-            try:
-                import subprocess
-                out = subprocess.check_output(
-                    ["wmic", "cpu", "get", "Name,Caption,Description", "/format:list"],
-                    stderr=subprocess.DEVNULL, text=True, timeout=5,
-                )
-                info["source"] = "wmic"
-                info["wmic"] = out.strip().replace("\r", "")
-            except Exception as ex:
-                info["source"] = f"unavailable ({ex})"
-    logger.info(f"CPU capabilities: {info}")
-    if info["avx"] is False:
-        logger.warning(
-            "⚠️ CPU does NOT expose AVX. PaddlePaddle's default AVX build will fail to load."
-        )
-    return info
+def _resolve_model_paths() -> dict:
+    """Return kwargs overriding RapidOCR's bundled models, if found on disk.
 
-
-def _register_paddle_dll_dirs() -> None:
-    """On Windows + Python 3.8+, PATH is not used for loading C extension
-    dependencies. Paddle's own __init__ is supposed to register its libs
-    directory, but in embedded/packaged layouts it sometimes fails. We
-    pre-register every known candidate directory so libpaddle can import.
-    """
-    if sys.platform != "win32" or not hasattr(os, "add_dll_directory"):
-        return
-    import site as _site
-    candidates = []
-    try:
-        candidates.extend(_site.getsitepackages())
-    except Exception:
-        pass
-    candidates.append(str(Path(sys.executable).parent / "Lib" / "site-packages"))
-    seen = set()
-    for sp in candidates:
-        libs_dir = Path(sp) / "paddle" / "libs"
-        if libs_dir.exists() and str(libs_dir) not in seen:
-            try:
-                os.add_dll_directory(str(libs_dir))
-                seen.add(str(libs_dir))
-                logger.info(f"Registered paddle DLL dir: {libs_dir}")
-            except OSError as e:
-                logger.warning(f"Could not register paddle DLL dir {libs_dir}: {e}")
-
-
-def _resolve_model_dirs() -> dict:
-    """Resolve on-disk paths to PaddleOCR 2.x inference models.
-
-    Priority:
-      1. NEUROX_MODELS_DIR env var (set by installer launcher) / ocr
-      2. <install>/models/ocr next to the backend folder
-      3. None → PaddleOCR will fall back to its default downloads on first use
+    Looks for files named det.onnx / rec.onnx / cls.onnx in:
+      1. $NEUROX_MODELS_DIR
+      2. <install>/models/ocr
+      3. <project_root>/models/ocr
+    Missing files are simply skipped (RapidOCR falls back to its bundled ones).
     """
     candidates = []
     env = os.getenv("NEUROX_MODELS_DIR")
@@ -234,54 +174,39 @@ def _resolve_model_dirs() -> dict:
         candidates.append(Path(env))
     candidates.append(BACKEND_DIR.parent / "models" / "ocr")
     candidates.append(PROJECT_ROOT / "models" / "ocr")
-    candidates.append(BACKEND_DIR / "models" / "ocr")
 
+    kwargs = {}
     for base in candidates:
-        det = base / "det"
-        rec = base / "rec"
-        cls = base / "cls"
-        if det.exists() and rec.exists() and cls.exists():
-            logger.info(f"Using OCR models from: {base}")
-            return {
-                "det_model_dir": str(det),
-                "rec_model_dir": str(rec),
-                "cls_model_dir": str(cls),
-            }
-    logger.warning(
-        "⚠️ OCR model directory not found in bundle; PaddleOCR will download "
-        "models on first use (requires internet)."
-    )
-    return {}
+        if not base.exists():
+            continue
+        det = base / "det.onnx"
+        rec = base / "rec.onnx"
+        cls = base / "cls.onnx"
+        if det.exists():
+            kwargs.setdefault("det_model_path", str(det))
+        if rec.exists():
+            kwargs.setdefault("rec_model_path", str(rec))
+        if cls.exists():
+            kwargs.setdefault("cls_model_path", str(cls))
+        if kwargs:
+            logger.info(f"Using custom OCR models from: {base} ({list(kwargs.keys())})")
+            break
+    if not kwargs:
+        logger.info("Using bundled RapidOCR models (shipped inside wheel)")
+    return kwargs
 
 
 def initialize_ocr():
     global ocr_engine
     if ocr_engine is None:
         try:
-            cpu_info = _log_cpu_capabilities()
-            # On CPUs without AVX, the standard paddlepaddle wheel fails to load
-            # (libpaddle.pyd init error → NameError). The installer detects this
-            # at install-time and installs paddlepaddle-noavx instead, so by the
-            # time we get here paddle should import cleanly. Keep the probe as
-            # a warning; the actual import will surface any remaining issue.
-            if cpu_info.get("avx") is False:
-                logger.warning(
-                    "CPU does not expose AVX — relying on paddlepaddle-noavx "
-                    "wheel installed by the NeuroX installer."
-                )
-            _register_paddle_dll_dirs()
-            from paddleocr import PaddleOCR
-            model_dirs = _resolve_model_dirs()
-            ocr_engine = PaddleOCR(
-                use_angle_cls=True,
-                lang="fr",
-                show_log=False,
-                **model_dirs,
-            )
-            logger.info("✅ PaddleOCR 2.x initialized successfully")
+            logger.info(f"Initializing RapidOCR (platform={platform.processor() or sys.platform})")
+            from rapidocr_onnxruntime import RapidOCR
+            ocr_engine = RapidOCR(**_resolve_model_paths())
+            logger.info("✅ RapidOCR (ONNX Runtime) initialized successfully")
         except Exception as e:
             import traceback
-            logger.error(f"Failed to initialize PaddleOCR: {e}")
+            logger.error(f"Failed to initialize RapidOCR: {e}")
             logger.error(f"Full traceback:\n{traceback.format_exc()}")
             raise
     return ocr_engine
@@ -312,8 +237,8 @@ async def lifespan(app: FastAPI):
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="FSE OCR API",
-    description="OCR API for French medical prescription processing using PaddleOCR",
-    version="2.0.0",
+    description="OCR API for French medical prescription processing using RapidOCR (ONNX Runtime)",
+    version="2.1.0",
     lifespan=lifespan
 )
 
@@ -338,7 +263,12 @@ app.mount("/static", StaticFiles(directory=temp_dir), name="static")
 
 # ── OCR helpers ───────────────────────────────────────────────────────────────
 def run_ocr_on_file(file_path: str, file_ext: str, unique_id: str):
-    """Run PaddleOCR and return (lines, text, results_with_conf, image_path)"""
+    """Run RapidOCR and return (lines, text, results_with_conf, image_path).
+
+    RapidOCR returns (result, elapse) where result is either None or a list of
+    ``[box, text, confidence]`` entries. We normalise to the same dict shape
+    that downstream code (ocr_to_schema, ocr_filter) expects.
+    """
     image_path = None
 
     if file_ext == '.pdf':
@@ -350,19 +280,24 @@ def run_ocr_on_file(file_path: str, file_ext: str, unique_id: str):
     else:
         ocr_input = file_path
 
-    result = ocr_engine.ocr(ocr_input, cls=True)
+    result, _elapse = ocr_engine(ocr_input)
 
     ocr_text_lines = []
     ocr_results_with_conf = []
 
-    if result and result[0]:
-        for line in result[0]:
-            if line and len(line) >= 2:
-                text = line[1][0]
-                confidence = line[1][1]
-                if confidence > 0.5:
-                    ocr_text_lines.append(text)
-                    ocr_results_with_conf.append({"text": text, "confidence": float(confidence)})
+    if result:
+        for line in result:
+            # RapidOCR format: [box, text, confidence]
+            if not line or len(line) < 3:
+                continue
+            text = line[1]
+            try:
+                confidence = float(line[2])
+            except (TypeError, ValueError):
+                continue
+            if confidence > 0.5:
+                ocr_text_lines.append(text)
+                ocr_results_with_conf.append({"text": text, "confidence": confidence})
 
     ocr_text = "\n".join(ocr_text_lines)
     return ocr_text_lines, ocr_text, ocr_results_with_conf, image_path
@@ -387,8 +322,8 @@ def extract_schema_from_ocr(ocr_results_with_conf: list, ocr_text: str) -> dict:
 async def root():
     return {
         "message": "FSE OCR API is running",
-        "version": "2.0.0",
-        "ocr_engine": "PaddleOCR",
+        "version": "2.1.0",
+        "ocr_engine": "RapidOCR-ONNXRuntime",
         "center_finess": CENTER_FINESS,
         "center_city": CENTER_CITY,
     }
@@ -415,7 +350,7 @@ async def parse_document(file: UploadFile = File(...)):
 
         image_path = None
         try:
-            logger.info(f"Running PaddleOCR on {file.filename}")
+            logger.info(f"Running RapidOCR on {file.filename}")
             ocr_text_lines, ocr_text, ocr_results_with_conf, image_path = run_ocr_on_file(
                 temp_path, file_ext, unique_id
             )
