@@ -6,6 +6,7 @@ Simplified version for window capture screenshot processing
 import zipfile
 import shutil
 import os
+import sys
 import tempfile
 import uuid
 from typing import Optional
@@ -15,9 +16,15 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from datetime import datetime
 
-load_dotenv(r"C:/Users/hp/Downloads/neuro/Neuro_backend/.env")
-print("EDM_BASE_PATH from env:", os.getenv("EDM_BASE_PATH"))
-print("CENTER_FINESS from env:", os.getenv("CENTER_FINESS"))
+# ── Resolve paths relative to this file (works in dev and bundled installs) ──
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BACKEND_DIR.parent
+
+# Load .env from backend root (next to api/), fallback to project root
+_env_path = BACKEND_DIR / ".env"
+if not _env_path.exists():
+    _env_path = PROJECT_ROOT / ".env"
+load_dotenv(str(_env_path))
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -26,9 +33,33 @@ from tempfile import gettempdir
 from loguru import logger
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-import sys
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# ── Logging configuration ────────────────────────────────────────────────────
+# Determine log directory: NEUROX_LOG_DIR env var → {project_root}/logs
+LOG_DIR = Path(os.getenv("NEUROX_LOG_DIR", str(PROJECT_ROOT / "logs")))
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Remove default stderr handler and re-add with consistent format
+logger.remove()
+logger.add(
+    sys.stderr,
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level:<8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+)
+logger.add(
+    str(LOG_DIR / "backend_{time:YYYY-MM-DD}.log"),
+    rotation="10 MB",
+    retention="30 days",
+    compression="zip",
+    level=os.getenv("LOG_LEVEL", "DEBUG"),
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {name}:{function}:{line} - {message}",
+    encoding="utf-8",
+)
+
+logger.info(f"Backend log directory: {LOG_DIR}")
+logger.info(f"Environment file: {_env_path} (exists={_env_path.exists()})")
+
+sys.path.append(str(BACKEND_DIR))
 from database import init_db, close_db
 
 # ── Center config from .env ──────────────────────────────────────────────────
@@ -120,20 +151,52 @@ class PrescriptionResponse(BaseModel):
 # ── OCR engine ───────────────────────────────────────────────────────────────
 ocr_engine = None
 
+
+def _register_paddle_dll_dirs() -> None:
+    """On Windows + Python 3.8+, PATH is not used for loading C extension
+    dependencies. Paddle's own __init__ is supposed to register its libs
+    directory, but in embedded/packaged layouts it sometimes fails. We
+    pre-register every known candidate directory so libpaddle can import.
+    """
+    if sys.platform != "win32" or not hasattr(os, "add_dll_directory"):
+        return
+    import site as _site
+    candidates = []
+    try:
+        candidates.extend(_site.getsitepackages())
+    except Exception:
+        pass
+    candidates.append(str(Path(sys.executable).parent / "Lib" / "site-packages"))
+    seen = set()
+    for sp in candidates:
+        libs_dir = Path(sp) / "paddle" / "libs"
+        if libs_dir.exists() and str(libs_dir) not in seen:
+            try:
+                os.add_dll_directory(str(libs_dir))
+                seen.add(str(libs_dir))
+                logger.info(f"Registered paddle DLL dir: {libs_dir}")
+            except OSError as e:
+                logger.warning(f"Could not register paddle DLL dir {libs_dir}: {e}")
+
+
 def initialize_ocr():
     global ocr_engine
     if ocr_engine is None:
         try:
+            _register_paddle_dll_dirs()
             from paddleocr import PaddleOCR
             ocr_engine = PaddleOCR(
-                use_angle_cls=True,
-                lang='fr',
-                use_gpu=False,
-                show_log=False
+                use_textline_orientation=True,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                text_detection_model_name='PP-OCRv5_mobile_det',
+                text_recognition_model_name='PP-OCRv5_mobile_rec',
             )
             logger.info("✅ PaddleOCR initialized successfully")
         except Exception as e:
+            import traceback
             logger.error(f"Failed to initialize PaddleOCR: {e}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
             raise
     return ocr_engine
 
