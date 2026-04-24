@@ -1,68 +1,33 @@
-# Python
-__pycache__/
-*.py[cod]
-*.so
-.Python
-venv/
-venv38/
-env/
-ENV/
-dist/
-build/
-*.egg-info/
-*.egg
-
-# PyInstaller / Nuitka
-*.spec
-*.exe
-*.onefile-build
-*.dist
-*.build
-
-# Offline installer (large folders)
+# Large binaries
 wheels/
+pgsql/
+python/
+models/
+venv/
+.venv/
+__pycache__/
 *.whl
-NeuroX_Offline_Installer/wheels/
-NeuroX_Offline_Installer/*.exe
-NeuroX_Offline_Installer/backend_src/_internal/
-NeuroX_Offline_Installer/*.pyc
-installer/bundle/
-installer/output/
-
-# Logs and local config
-logs/
+*.exe
+*.pyd
+*.dll
 *.log
-.env
-.env.local
+nul
 
-# IDE
-.vscode/
-.idea/
-*.swp
+# Installer build outputs
+InstallerSource/python/
+InstallerSource/wheels/
+InstallerSource/pgsql/
+InstallerSource/models/
+backend_src/python/
+backend_src/wheels/
+backend_src/pgsql/
+backend_src/models/
+backend_src/__pycache__/
 
-# OS junk
-Thumbs.db
-.DS_Store
+# Frontend build
+Neuro_frontend/dist/
+Neuro_frontend/out/
+Neuro_frontend/frontend/
 
-# Temp/build artifacts
-_asar_staging/
-_asar_check/
-_asar_verify/
-Neuro_frontend/_asar_staging/
-Neuro_backend/docs/
-Neuro_backend/_legacy/
-
-# Large media/data files
-*.mp4
-*.zip
-Neuro_backend/video_analysis/frames/
-Neuro_backend/video_analysis/frames.zip
-
-# Working docs at root
-*.docx
-*.xlsx
-*.jpeg
-*.pdf
-*.ini
-description du projet.txt
-onednn_instruction.cc
+# Inno Setup output
+installer/output/
