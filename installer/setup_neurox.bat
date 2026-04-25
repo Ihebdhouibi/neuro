@@ -139,51 +139,52 @@ REM Wait a moment for PostgreSQL to be ready
 timeout /t 3 /nobreak > nul
 
 :create_db
-REM Create the neurox database if it doesn't exist (using psql, more reliable
-REM than createdb on locked-down Windows boxes).
-if exist "%PG_BIN%\psql.exe" (
-    call :log "Checking for 'neurox' database..."
-    for /f "usebackq tokens=*" %%v in (`"%PG_BIN%\psql.exe" -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='neurox'" 2^>nul`) do set "DB_EXISTS=%%v"
-    if "!DB_EXISTS!"=="1" (
-        call :log "Database 'neurox' already exists"
-    ) else (
-        call :log "Creating database 'neurox'..."
-        "%PG_BIN%\psql.exe" -U postgres -d postgres -c "CREATE DATABASE neurox;" >> "%LOG_FILE%" 2>&1
-        if !ERRORLEVEL! equ 0 (
-            call :log "Database 'neurox' created successfully"
-        ) else (
-            call :log "ERROR: CREATE DATABASE failed (exit !ERRORLEVEL!) - see log above"
-        )
-    )
+REM Create the neurox database. Using psql with `CREATE DATABASE` is more
+REM reliable than createdb.exe on locked-down Windows machines.
+REM
+REM IMPORTANT: this section is intentionally NOT wrapped in `if exist (...)`
+REM parens — CMD's pre-parser silently aborts complex blocks containing
+REM `for /f` + escaped redirection + nested quotes (this caused v1.0.2 to
+REM emit zero log lines after pg_ctl start). Use goto for flow control.
+if not exist "%PG_BIN%\psql.exe" goto :finish
 
-    REM Verify the database is reachable before running migrations
-    "%PG_BIN%\psql.exe" -U postgres -d neurox -c "SELECT 1" >> "%LOG_FILE%" 2>&1
-    if !ERRORLEVEL! neq 0 (
-        call :log "ERROR: Cannot connect to neurox DB after creation - aborting init_db.py"
-        goto :stop_pg
-    )
+call :log "Attempting to create 'neurox' database..."
+"%PG_BIN%\psql.exe" -U postgres -d postgres -c "CREATE DATABASE neurox;" >> "%LOG_FILE%" 2>&1
+set "CREATE_RC=!ERRORLEVEL!"
+if !CREATE_RC! equ 0 (
+    call :log "Database 'neurox' created successfully"
+) else (
+    call :log "CREATE DATABASE returned !CREATE_RC! - DB may already exist, will verify with SELECT"
+)
 
-    REM Run database initialization (create tables + seed default user)
-    if exist "%PYTHON%" (
-        call :log "Running database table initialization + default user seed..."
-        set "DATABASE_URL=postgresql://postgres@localhost:5432/neurox"
-        "%PYTHON%" "%INSTALL_DIR%\backend_src\init_db.py" >> "%LOG_FILE%" 2>&1
-        if !ERRORLEVEL! equ 0 (
-            call :log "Database initialized (tables + default admin user)"
-        ) else (
-            call :log "WARNING: init_db.py exited with code !ERRORLEVEL!"
-        )
-    )
+REM Verify the database is reachable. If this fails, the DB really doesn't
+REM exist and we cannot continue with table init / user seeding.
+"%PG_BIN%\psql.exe" -U postgres -d neurox -c "SELECT 1" >> "%LOG_FILE%" 2>&1
+if !ERRORLEVEL! neq 0 (
+    call :log "ERROR: Cannot connect to 'neurox' DB - skipping init_db.py"
+    goto :stop_pg
+)
+call :log "Verified 'neurox' DB is reachable"
+
+REM Run database initialization (create tables + seed default user)
+if not exist "%PYTHON%" goto :stop_pg
+call :log "Running init_db.py (tables + default admin user)..."
+set "DATABASE_URL=postgresql://postgres@localhost:5432/neurox"
+"%PYTHON%" "%INSTALL_DIR%\backend_src\init_db.py" >> "%LOG_FILE%" 2>&1
+if !ERRORLEVEL! equ 0 (
+    call :log "Database initialized (tables + default admin user 'admin')"
+) else (
+    call :log "WARNING: init_db.py exited with code !ERRORLEVEL!"
+)
 
 :stop_pg
-    REM Stop PostgreSQL (it will be started by the app launcher)
-    call :log "Stopping PostgreSQL..."
-    "%PG_BIN%\pg_ctl.exe" stop -D "%PG_DATA%" -m fast >> "%LOG_FILE%" 2>&1
-    REM Belt-and-braces: clean up postmaster.pid in case shutdown didn't
-    if exist "%PG_DATA%\postmaster.pid" (
-        call :log "Removing leftover postmaster.pid"
-        del /f /q "%PG_DATA%\postmaster.pid" >> "%LOG_FILE%" 2>&1
-    )
+REM Stop PostgreSQL (it will be started by the app launcher)
+call :log "Stopping PostgreSQL..."
+"%PG_BIN%\pg_ctl.exe" stop -D "%PG_DATA%" -m fast >> "%LOG_FILE%" 2>&1
+REM Belt-and-braces: clean up postmaster.pid in case shutdown didn't
+if exist "%PG_DATA%\postmaster.pid" (
+    call :log "Removing leftover postmaster.pid"
+    del /f /q "%PG_DATA%\postmaster.pid" >> "%LOG_FILE%" 2>&1
 )
 
 :finish
