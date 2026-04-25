@@ -31,6 +31,40 @@ export async function startPostgres(): Promise<void> {
     return
   }
 
+  // Defensive cleanup: if a previous app crash left a postmaster.pid file
+  // behind, pg_ctl start will refuse to launch with "lock file already
+  // exists". Use `pg_ctl status` to check if the server really is running;
+  // exit code 3 means "not running" — in that case the .pid is stale and
+  // safe to delete.
+  const pidFile = join(dataDir, 'postmaster.pid')
+  if (existsSync(pidFile)) {
+    log.info(`Found existing postmaster.pid at ${pidFile} — checking if PG is actually running`)
+    try {
+      const status = spawn(pgCtl, ['status', '-D', dataDir], {
+        stdio: 'ignore',
+        windowsHide: true,
+      })
+      await new Promise<void>((res) => {
+        status.on('close', (code) => {
+          if (code !== 0) {
+            try {
+              require('fs').unlinkSync(pidFile)
+              log.info('Removed stale postmaster.pid')
+            } catch (e) {
+              log.warn(`Could not remove stale postmaster.pid: ${(e as Error).message}`)
+            }
+          } else {
+            log.info('PostgreSQL is already running — skipping start')
+          }
+          res()
+        })
+        status.on('error', () => res())
+      })
+    } catch (e) {
+      log.warn(`pg_ctl status check failed: ${(e as Error).message}`)
+    }
+  }
+
   log.info(`Starting PostgreSQL: ${pgCtl} -D ${dataDir}`)
 
   return new Promise((resolve) => {

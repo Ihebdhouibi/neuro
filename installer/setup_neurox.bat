@@ -139,32 +139,51 @@ REM Wait a moment for PostgreSQL to be ready
 timeout /t 3 /nobreak > nul
 
 :create_db
-REM Create the neurox database if it doesn't exist
+REM Create the neurox database if it doesn't exist (using psql, more reliable
+REM than createdb on locked-down Windows boxes).
 if exist "%PG_BIN%\psql.exe" (
-    call :log "Creating neurox database..."
-    "%PG_BIN%\psql.exe" -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'neurox'" | findstr "1" > nul 2>&1
-    if %ERRORLEVEL% neq 0 (
-        "%PG_BIN%\createdb.exe" -U postgres neurox >> "%LOG_FILE%" 2>&1
-        if %ERRORLEVEL% equ 0 (
+    call :log "Checking for 'neurox' database..."
+    for /f "usebackq tokens=*" %%v in (`"%PG_BIN%\psql.exe" -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='neurox'" 2^>nul`) do set "DB_EXISTS=%%v"
+    if "!DB_EXISTS!"=="1" (
+        call :log "Database 'neurox' already exists"
+    ) else (
+        call :log "Creating database 'neurox'..."
+        "%PG_BIN%\psql.exe" -U postgres -d postgres -c "CREATE DATABASE neurox;" >> "%LOG_FILE%" 2>&1
+        if !ERRORLEVEL! equ 0 (
             call :log "Database 'neurox' created successfully"
         ) else (
-            call :log "WARNING: Could not create database (may already exist)"
+            call :log "ERROR: CREATE DATABASE failed (exit !ERRORLEVEL!) - see log above"
         )
-    ) else (
-        call :log "Database 'neurox' already exists"
     )
 
-    REM Run database initialization (create tables)
+    REM Verify the database is reachable before running migrations
+    "%PG_BIN%\psql.exe" -U postgres -d neurox -c "SELECT 1" >> "%LOG_FILE%" 2>&1
+    if !ERRORLEVEL! neq 0 (
+        call :log "ERROR: Cannot connect to neurox DB after creation - aborting init_db.py"
+        goto :stop_pg
+    )
+
+    REM Run database initialization (create tables + seed default user)
     if exist "%PYTHON%" (
-        call :log "Running database table initialization..."
+        call :log "Running database table initialization + default user seed..."
         set "DATABASE_URL=postgresql://postgres@localhost:5432/neurox"
         "%PYTHON%" "%INSTALL_DIR%\backend_src\init_db.py" >> "%LOG_FILE%" 2>&1
-        call :log "Database tables initialized"
+        if !ERRORLEVEL! equ 0 (
+            call :log "Database initialized (tables + default admin user)"
+        ) else (
+            call :log "WARNING: init_db.py exited with code !ERRORLEVEL!"
+        )
     )
 
+:stop_pg
     REM Stop PostgreSQL (it will be started by the app launcher)
     call :log "Stopping PostgreSQL..."
     "%PG_BIN%\pg_ctl.exe" stop -D "%PG_DATA%" -m fast >> "%LOG_FILE%" 2>&1
+    REM Belt-and-braces: clean up postmaster.pid in case shutdown didn't
+    if exist "%PG_DATA%\postmaster.pid" (
+        call :log "Removing leftover postmaster.pid"
+        del /f /q "%PG_DATA%\postmaster.pid" >> "%LOG_FILE%" 2>&1
+    )
 )
 
 :finish
@@ -178,6 +197,12 @@ set "LAUNCHER=%INSTALL_DIR%\NeuroX.bat"
     echo set "NEUROX_LOG_DIR=%%INSTALL_DIR%%logs"
     echo set "DATABASE_URL=postgresql://postgres@localhost:5432/neurox"
     echo set "NEUROX_PG_DATA=%%PROGRAMDATA%%\NeuroX\pgdata17"
+    echo.
+    echo REM Clean up any stale postmaster.pid from a crash or unclean shutdown.
+    echo if exist "%%NEUROX_PG_DATA%%\postmaster.pid" ^(
+    echo     "%%INSTALL_DIR%%pgsql\bin\pg_ctl.exe" status -D "%%NEUROX_PG_DATA%%" ^>nul 2^>^&1
+    echo     if errorlevel 3 del /f /q "%%NEUROX_PG_DATA%%\postmaster.pid"
+    echo ^)
     echo.
     echo REM Start PostgreSQL
     echo if exist "%%INSTALL_DIR%%pgsql\bin\pg_ctl.exe" ^(
