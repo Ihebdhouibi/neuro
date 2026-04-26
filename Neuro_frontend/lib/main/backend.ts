@@ -35,8 +35,9 @@ export async function startPostgres(): Promise<void> {
   // behind, pg_ctl start will refuse to launch with "lock file already
   // exists". Use `pg_ctl status` to check if the server really is running;
   // exit code 3 means "not running" — in that case the .pid is stale and
-  // safe to delete.
+  // safe to delete. If PG is already running (code 0), skip starting.
   const pidFile = join(dataDir, 'postmaster.pid')
+  let alreadyRunning = false
   if (existsSync(pidFile)) {
     log.info(`Found existing postmaster.pid at ${pidFile} — checking if PG is actually running`)
     try {
@@ -46,7 +47,12 @@ export async function startPostgres(): Promise<void> {
       })
       await new Promise<void>((res) => {
         status.on('close', (code) => {
-          if (code !== 0) {
+          // pg_ctl status exit codes: 0 = running, 3 = not running,
+          // 4 = no/invalid data dir. Only treat 3 as "safe to delete pid".
+          if (code === 0) {
+            log.info('PostgreSQL is already running — skipping start')
+            alreadyRunning = true
+          } else if (code === 3) {
             try {
               require('fs').unlinkSync(pidFile)
               log.info('Removed stale postmaster.pid')
@@ -54,7 +60,7 @@ export async function startPostgres(): Promise<void> {
               log.warn(`Could not remove stale postmaster.pid: ${(e as Error).message}`)
             }
           } else {
-            log.info('PostgreSQL is already running — skipping start')
+            log.warn(`pg_ctl status returned unexpected code ${code} — not touching postmaster.pid`)
           }
           res()
         })
@@ -63,6 +69,10 @@ export async function startPostgres(): Promise<void> {
     } catch (e) {
       log.warn(`pg_ctl status check failed: ${(e as Error).message}`)
     }
+  }
+
+  if (alreadyRunning) {
+    return
   }
 
   log.info(`Starting PostgreSQL: ${pgCtl} -D ${dataDir}`)

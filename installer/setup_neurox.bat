@@ -55,6 +55,7 @@ if exist "%MODELS_SRC%" (
 )
 
 :pg_setup
+call :log "Reached :pg_setup label"
 REM ── 3. Initialize PostgreSQL database ───────────────────────────────────────
 set "PG_BIN=%INSTALL_DIR%\pgsql\bin"
 REM Versioned data dir: prevents clashes with legacy PG data from previous installs.
@@ -196,6 +197,7 @@ if exist "%PG_DATA%\postmaster.pid" (
 )
 
 :finish
+call :log "Reached :finish label"
 REM ── 4. Create a launcher script ────────────────────────────────────────────
 set "LAUNCHER=%INSTALL_DIR%\NeuroX.bat"
 (
