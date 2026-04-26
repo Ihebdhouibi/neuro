@@ -134,11 +134,19 @@ if %ERRORLEVEL% neq 0 (
 REM Start PostgreSQL temporarily to create the database
 call :log "Starting PostgreSQL for database creation..."
 "%PG_BIN%\pg_ctl.exe" start -D "%PG_DATA%" -w -l "%LOG_DIR%\postgresql_setup.log" >> "%LOG_FILE%" 2>&1
+call :log "pg_ctl start returned !ERRORLEVEL!"
 
-REM Wait a moment for PostgreSQL to be ready
-timeout /t 3 /nobreak > nul
+REM NOTE: do NOT use `timeout` here. Inno Setup runs this bat with the
+REM `runhidden` flag, which means there is no console attached. Under those
+REM conditions `timeout.exe` aborts with "Input redirection is not supported"
+REM and KILLS the entire calling cmd.exe process — this caused v1.0.2 and
+REM v1.0.3 to silently exit right after `pg_ctl start` and never run any of
+REM the database-creation logic below. `pg_ctl -w` already blocks until the
+REM server is ready, so no extra wait is needed. If a wait is ever required
+REM here, use `ping -n 4 127.0.0.1 >nul` instead — it works under runhidden.
 
 :create_db
+call :log "Reached :create_db label"
 REM Create the neurox database. Using psql with `CREATE DATABASE` is more
 REM reliable than createdb.exe on locked-down Windows machines.
 REM

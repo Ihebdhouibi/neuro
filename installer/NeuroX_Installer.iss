@@ -20,7 +20,7 @@
 ; ===========================================================================
 
 #define MyAppName      "NeuroX"
-#define MyAppVersion   "1.0.3"
+#define MyAppVersion   "1.0.4"
 #define MyAppPublisher "NeuroX Team"
 #define MyAppExeName   "ElectronReactApp.exe"
 #define BundleDir      "..\installer\bundle"
