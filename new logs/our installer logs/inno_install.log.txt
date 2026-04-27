@@ -1,0 +1,21 @@
+2026-04-23 21:19:40 | NeuroX Installer starting
+2026-04-23 21:19:40 | OS: 10.00.19045
+2026-04-23 21:19:40 | Installer version: 1.0.0
+2026-04-23 21:19:43 | Selected install directory: C:\Program Files (x86)\NeuroX
+2026-04-23 21:19:43 | Drive root: C:\
+2026-04-23 21:19:43 | Free disk space: 685750 MB
+2026-04-23 21:19:47 | Installation step: copying files to C:\Program Files (x86)\NeuroX
+2026-04-23 21:28:53 | VC++ Redistributable already installed: v14.44.35211.00
+2026-04-23 21:28:54 | Post-install step: running setup scripts
+2026-04-23 21:28:54 | Installation log written to: C:\Program Files (x86)\NeuroX\logs\inno_install.log
+2026-04-23 21:19:40 | NeuroX Installer starting
+2026-04-23 21:19:40 | OS: 10.00.19045
+2026-04-23 21:19:40 | Installer version: 1.0.0
+2026-04-23 21:19:43 | Selected install directory: C:\Program Files (x86)\NeuroX
+2026-04-23 21:19:43 | Drive root: C:\
+2026-04-23 21:19:43 | Free disk space: 685750 MB
+2026-04-23 21:19:47 | Installation step: copying files to C:\Program Files (x86)\NeuroX
+2026-04-23 21:28:53 | VC++ Redistributable already installed: v14.44.35211.00
+2026-04-23 21:28:54 | Post-install step: running setup scripts
+2026-04-23 21:28:54 | Installation log written to: C:\Program Files (x86)\NeuroX\logs\inno_install.log
+2026-04-23 21:28:57 | Installation completed successfully

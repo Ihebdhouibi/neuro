@@ -1,0 +1,188 @@
+2026-04-23 21:28:58.454 | info | Frontend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-23 21:28:58.471 | info | App packaged: true
+2026-04-23 21:28:58.689 | info | Starting backend services...
+2026-04-23 21:28:58.691 | info | Starting PostgreSQL: C:\Program Files (x86)\NeuroX\pgsql\bin\pg_ctl.exe -D C:\ProgramData\NeuroX\pgdata
+2026-04-23 21:29:07.173 | error | PostgreSQL failed to start (exit 1): pg_ctl : un autre serveur semble en cours d'ex�cution ; le d�marrage du serveur
+va toutefois �tre tent�
+pg_ctl : n'a pas pu d�marrer le serveur
+Examinez le journal applicatif.
+
+2026-04-23 21:29:07.177 | info | Added PaddleOCR DLL path to Path: C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\libs
+2026-04-23 21:29:07.179 | info | Starting backend (embedded python): C:\Program Files (x86)\NeuroX\python\python.exe C:\Program Files (x86)\NeuroX\backend_src\api\main_paddleocr.py
+2026-04-23 21:29:14.638 | info | Frontend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-23 21:29:14.679 | info | App packaged: true
+2026-04-23 21:29:15.005 | info | Starting backend services...
+2026-04-23 21:29:15.007 | info | Starting PostgreSQL: C:\Program Files (x86)\NeuroX\pgsql\bin\pg_ctl.exe -D C:\ProgramData\NeuroX\pgdata
+2026-04-23 21:29:15.131 | info | Waiting for backend... (5/30)
+2026-04-23 21:29:17.566 | error | PostgreSQL failed to start (exit 1): pg_ctl : un autre serveur semble en cours d'ex�cution ; le d�marrage du serveur
+va toutefois �tre tent�
+pg_ctl : n'a pas pu d�marrer le serveur
+Examinez le journal applicatif.
+
+2026-04-23 21:29:17.569 | info | Added PaddleOCR DLL path to Path: C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\libs
+2026-04-23 21:29:17.571 | info | Starting backend (embedded python): C:\Program Files (x86)\NeuroX\python\python.exe C:\Program Files (x86)\NeuroX\backend_src\api\main_paddleocr.py
+2026-04-23 21:29:22.486 | info | Waiting for backend... (10/30)
+2026-04-23 21:29:25.193 | info | Waiting for backend... (5/30)
+2026-04-23 21:29:26.259 | warn | [backend] 2026-04-23 21:29:26 | INFO     | __main__:<module>:59 - Backend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-23 21:29:26.261 | warn | [backend] 2026-04-23 21:29:26 | INFO     | __main__:<module>:59 - Backend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-23 21:29:26.262 | warn | [backend] 2026-04-23 21:29:26 | INFO     | __main__:<module>:60 - Environment file: C:\Program Files (x86)\NeuroX\backend_src\.env (exists=True)
+2026-04-23 21:29:26.263 | warn | [backend] 2026-04-23 21:29:26 | INFO     | __main__:<module>:60 - Environment file: C:\Program Files (x86)\NeuroX\backend_src\.env (exists=True)
+2026-04-23 21:29:29.593 | info | Waiting for backend... (15/30)
+2026-04-23 21:29:32.346 | info | Waiting for backend... (10/30)
+2026-04-23 21:29:35.520 | info | Frontend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-23 21:29:35.536 | info | App packaged: true
+2026-04-23 21:29:35.738 | info | Starting backend services...
+2026-04-23 21:29:35.740 | info | Starting PostgreSQL: C:\Program Files (x86)\NeuroX\pgsql\bin\pg_ctl.exe -D C:\ProgramData\NeuroX\pgdata
+2026-04-23 21:29:36.709 | info | Waiting for backend... (20/30)
+2026-04-23 21:29:37.907 | error | PostgreSQL failed to start (exit 1): pg_ctl : un autre serveur semble en cours d'ex�cution ; le d�marrage du serveur
+va toutefois �tre tent�
+pg_ctl : n'a pas pu d�marrer le serveur
+Examinez le journal applicatif.
+
+2026-04-23 21:29:37.910 | info | Added PaddleOCR DLL path to Path: C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\libs
+2026-04-23 21:29:37.912 | info | Starting backend (embedded python): C:\Program Files (x86)\NeuroX\python\python.exe C:\Program Files (x86)\NeuroX\backend_src\api\main_paddleocr.py
+2026-04-23 21:29:39.418 | info | Waiting for backend... (15/30)
+2026-04-23 21:29:43.794 | info | Waiting for backend... (25/30)
+2026-04-23 21:29:44.081 | warn | [backend] 2026-04-23 21:29:44 | INFO     | __main__:<module>:59 - Backend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-23 21:29:44.083 | warn | [backend] 2026-04-23 21:29:44 | INFO     | __main__:<module>:60 - Environment file: C:\Program Files (x86)\NeuroX\backend_src\.env (exists=True)
+2026-04-23 21:29:44.564 | warn | [backend] INFO:     Started server process [14808]
+INFO:     Waiting for application startup.
+2026-04-23 21:29:44.578 | warn | [backend] INFO:     Started server process [14960]
+2026-04-23 21:29:44.580 | warn | [backend] INFO:     Waiting for application startup.
+2026-04-23 21:29:45.401 | info | Waiting for backend... (5/30)
+2026-04-23 21:29:46.564 | info | Waiting for backend... (20/30)
+2026-04-23 21:29:49.578 | warn | [backend] 2026-04-23 21:29:49 | ERROR    | database:init_db:83 - \u274c Failed to initialize database: [WinError 1225] Le syst�me distant a refus� la connexion r�seau
+2026-04-23 21:29:49 | WARNING  | __main__:lifespan:210 - \u26a0\ufe0f Database initialization failed: [WinError 1225] Le syst�me distant a refus� la connexion r�seau
+2026-04-23 21:29:49.580 | warn | [backend] 2026-04-23 21:29:49 | ERROR    | database:init_db:83 - \u274c Failed to initialize database: [WinError 1225] Le syst�me distant a refus� la connexion r�seau
+2026-04-23 21:29:49.584 | warn | [backend] 2026-04-23 21:29:49 | WARNING  | __main__:lifespan:210 - \u26a0\ufe0f Database initialization failed: [WinError 1225] Le syst�me distant a refus� la connexion r�seau
+2026-04-23 21:29:49 | INFO     | __main__:_register_paddle_dll_dirs:177 - Registered paddle DLL dir: C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\libs
+2026-04-23 21:29:49.584 | warn | [backend] 2026-04-23 21:29:49 | INFO     | __main__:_register_paddle_dll_dirs:177 - Registered paddle DLL dir: C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\libs
+2026-04-23 21:29:50.232 | warn | [backend] INFO:     Started server process [3224]
+2026-04-23 21:29:50.234 | warn | [backend] INFO:     Waiting for application startup.
+2026-04-23 21:29:51.096 | info | Waiting for backend... (30/30)
+2026-04-23 21:29:51.097 | warn | Backend did not become ready within timeout — app will load anyway
+2026-04-23 21:29:51.098 | info | Application ready — creating main window
+2026-04-23 21:29:52.605 | info | Waiting for backend... (10/30)
+2026-04-23 21:29:53.910 | info | Waiting for backend... (25/30)
+2026-04-23 21:29:54.910 | warn | [backend] 2026-04-23 21:29:54 | ERROR    | database:init_db:83 - \u274c Failed to initialize database: [WinError 1225] Le syst�me distant a refus� la connexion r�seau
+2026-04-23 21:29:54 | WARNING  | __main__:lifespan:210 - \u26a0\ufe0f Database initialization failed: [WinError 1225] Le syst�me distant a refus� la connexion r�seau
+2026-04-23 21:29:54 | INFO     | __main__:_register_paddle_dll_dirs:177 - Registered paddle DLL dir: C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\libs
+2026-04-23 21:29:59.713 | info | Waiting for backend... (15/30)
+2026-04-23 21:30:00.945 | info | Waiting for backend... (30/30)
+2026-04-23 21:30:00.947 | warn | Backend did not become ready within timeout — app will load anyway
+2026-04-23 21:30:00.948 | info | Application ready — creating main window
+2026-04-23 21:30:06.713 | info | Waiting for backend... (20/30)
+2026-04-23 21:30:13.913 | info | Waiting for backend... (25/30)
+2026-04-23 21:30:18.980 | warn | [backend] [33mNo model hoster is available! Please check your network connection to one of the following model hosts:
+HuggingFace (https://huggingface.co),
+ModelScope (https://modelscope.cn),
+AIStudio (https://aistudio.baidu.com), or
+BOS (https://paddle-model-ecology.bj.bcebos.com).
+Otherwise, only local models can be used.[0m
+2026-04-23 21:30:19.012 | warn | [backend] [33mNo model hoster is available! Please check your network connection to one of the following model hosts:
+HuggingFace (https://huggingface.co),
+ModelScope (https://modelscope.cn),
+AIStudio (https://aistudio.baidu.com), or
+BOS (https://paddle-model-ecology.bj.bcebos.com).
+Otherwise, only local models can be used.[0m
+2026-04-23 21:30:19.054 | warn | [backend] [33mNo model hoster is available! Please check your network connection to one of the following model hosts:
+HuggingFace (https://huggingface.co),
+ModelScope (https://modelscope.cn),
+AIStudio (https://aistudio.baidu.com), or
+BOS (https://paddle-model-ecology.bj.bcebos.com).
+Otherwise, only local models can be used.[0m
+2026-04-23 21:30:20.599 | info | Application quitting — stopping services
+2026-04-23 21:30:20.601 | info | Stopping backend process...
+2026-04-23 21:30:20.602 | info | Stopping PostgreSQL...
+2026-04-23 21:30:20.898 | info | Waiting for backend... (30/30)
+2026-04-23 21:30:20.900 | warn | Backend did not become ready within timeout — app will load anyway
+2026-04-23 21:30:20.901 | info | Application ready — creating main window
+2026-04-23 21:31:13.342 | warn | [backend] Error: Can not import paddle core while this file exists: C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\libpaddle.pyd
+2026-04-23 21:31:13.345 | warn | [backend] 2026-04-23 21:31:13 | ERROR    | __main__:initialize_ocr:198 - Failed to initialize PaddleOCR: name 'libpaddle' is not defined
+2026-04-23 21:31:13.359 | warn | [backend] 2026-04-23 21:31:13 | ERROR    | __main__:initialize_ocr:199 - Full traceback:
+Traceback (most recent call last):
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\core.py", line 267, in <module>
+    from . import libpaddle
+ImportError: DLL load failed while importing libpaddle: Une routine d�initialisation d�une biblioth�que de liens dynamiques (DLL) a �chou�.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Program Files (x86)\NeuroX\backend_src\api\main_paddleocr.py", line 188, in initialize_ocr
+    ocr_engine = PaddleOCR(
+                 ^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddleocr\_pipelines\ocr.py", line 163, in __init__
+    super().__init__(**base_params)
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddleocr\_pipelines\base.py", line 67, in __init__
+    self.paddlex_pipeline = self._create_paddlex_pipeline()
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddleocr\_pipelines\base.py", line 100, in _create_paddlex_pipeline
+    kwargs = prepare_common_init_args(None, self._common_args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddleocr\_common_args.py", line 61, in prepare_common_init_args
+    device = get_default_device()
+             ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddlex\utils\device.py", line 42, in get_default_device
+    import paddle
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\__init__.py", line 44, in <module>
+    from .base import core  # noqa: F401
+    ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\__init__.py", line 38, in <module>
+    from . import (  # noqa: F401
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\backward.py", line 28, in <module>
+    from . import core, framework, log_helper, unique_name
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\core.py", line 388, in <module>
+    if not avx_supported() and libpaddle.is_compiled_with_avx():
+                               ^^^^^^^^^
+NameError: name 'libpaddle' is not defined
+2026-04-23 21:31:13.362 | warn | [backend] 2026-04-23 21:31:13 | WARNING  | __main__:lifespan:215 - \u26a0\ufe0f Failed to initialize OCR: name 'libpaddle' is not defined
+2026-04-23 21:31:13 | WARNING  | __main__:lifespan:216 - \u26a0\ufe0f OCR features will be disabled
+2026-04-23 21:31:13.368 | warn | [backend] INFO:     Application startup complete.
+2026-04-23 21:31:13.370 | warn | [backend] INFO:     Uvicorn running on http://0.0.0.0:7861 (Press CTRL+C to quit)
+2026-04-23 21:31:13.397 | warn | [backend] Error: Can not import paddle core while this file exists: C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\libpaddle.pyd
+2026-04-23 21:31:13.401 | warn | [backend] 2026-04-23 21:31:13 | ERROR    | __main__:initialize_ocr:198 - Failed to initialize PaddleOCR: name 'libpaddle' is not defined
+2026-04-23 21:31:13.415 | warn | [backend] 2026-04-23 21:31:13 | ERROR    | __main__:initialize_ocr:199 - Full traceback:
+Traceback (most recent call last):
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\core.py", line 267, in <module>
+    from . import libpaddle
+ImportError: DLL load failed while importing libpaddle: Une routine d�initialisation d�une biblioth�que de liens dynamiques (DLL) a �chou�.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Program Files (x86)\NeuroX\backend_src\api\main_paddleocr.py", line 188, in initialize_ocr
+    ocr_engine = PaddleOCR(
+                 ^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddleocr\_pipelines\ocr.py", line 163, in __init__
+    super().__init__(**base_params)
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddleocr\_pipelines\base.py", line 67, in __init__
+    self.paddlex_pipeline = self._create_paddlex_pipeline()
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddleocr\_pipelines\base.py", line 100, in _create_paddlex_pipeline
+    kwargs = prepare_common_init_args(None, self._common_args)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddleocr\_common_args.py", line 61, in prepare_common_init_args
+    device = get_default_device()
+             ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddlex\utils\device.py", line 42, in get_default_device
+    import paddle
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\__init__.py", line 44, in <module>
+    from .base import core  # noqa: F401
+    ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\__init__.py", line 38, in <module>
+    from . import (  # noqa: F401
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\backward.py", line 28, in <module>
+    from . import core, framework, log_helper, unique_name
+  File "C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\base\core.py", line 388, in <module>
+    if not avx_supported() and libpaddle.is_compiled_with_avx():
+                               ^^^^^^^^^
+NameError: name 'libpaddle' is not defined
+2026-04-23 21:31:13.417 | warn | [backend] 2026-04-23 21:31:13 | WARNING  | __main__:lifespan:215 - \u26a0\ufe0f Failed to initialize OCR: name 'libpaddle' is not defined
+2026-04-23 21:31:13 | WARNING  | __main__:lifespan:216 - \u26a0\ufe0f OCR features will be disabled
+2026-04-23 21:31:13.423 | warn | [backend] INFO:     Application startup complete.
+2026-04-23 21:31:13.425 | warn | [backend] ERROR:    [Errno 10048] error while attempting to bind on address ('0.0.0.0', 7861): une seule utilisation de chaque adresse de socket (protocole/adresse r�seau/port) est habituellement autoris�e
+2026-04-23 21:31:13.426 | warn | [backend] INFO:     Waiting for application shutdown.
+2026-04-23 21:31:13.431 | warn | [backend] 2026-04-23 21:31:13 | INFO     | database:close_db:91 - \U0001f504 Database connections closed
+2026-04-23 21:31:13.433 | warn | [backend] 2026-04-23 21:31:13 | INFO     | __main__:lifespan:224 - \U0001f504 Application shutdown complete
+2026-04-23 21:31:13.435 | warn | [backend] INFO:     Application shutdown complete.
+2026-04-23 21:31:14.406 | info | Backend process exited with code 3221225477

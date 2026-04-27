@@ -126,7 +126,7 @@ export async function startBackend(): Promise<void> {
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     NEUROX_LOG_DIR: join(installDir, 'logs'),
-    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://postgres@localhost:5432/neurox',
+    DATABASE_URL: process.env.DATABASE_URL || 'postgresql://postgres@localhost:55432/neurox',
     PADDLEX_HOME: join(installDir, 'models'),
     PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True',
   }

@@ -132,6 +132,34 @@ if %ERRORLEVEL% neq 0 (
     call :log "PostgreSQL data ACLs updated"
 )
 
+REM ── Force PostgreSQL to listen on a non-conflicting port ─────────────────
+REM On Windows machines with Hyper-V / WSL2 / Docker / Windows Sandbox
+REM enabled, port 5432 frequently lands inside Hyper-V's dynamically-reserved
+REM port range ("netsh int ipv4 show excludedportrange"), causing PG to fail
+REM at bind() with "Permission denied" - exactly what we saw in v1.0.4 logs.
+REM Use 55432 which is well outside the typical reserved ranges. We also
+REM force listen_addresses to localhost to avoid surprises with IPv6.
+set "NEUROX_PG_PORT=55432"
+set "PG_CONF=%PG_DATA%\postgresql.conf"
+
+REM Make sure no PG is currently running against this data dir before we
+REM touch its config (a leftover postmaster from a previous install would
+REM still be on the old port). pg_ctl stop is idempotent — failure is fine.
+"%PG_BIN%\pg_ctl.exe" stop -D "%PG_DATA%" -m immediate >> "%LOG_FILE%" 2>&1
+if exist "%PG_DATA%\postmaster.pid" del /f /q "%PG_DATA%\postmaster.pid" >> "%LOG_FILE%" 2>&1
+
+if exist "%PG_CONF%" (
+    call :log "Patching postgresql.conf to use port %NEUROX_PG_PORT%..."
+    REM Append (overrides any earlier port= since later wins in postgresql.conf)
+    >>"%PG_CONF%" echo.
+    >>"%PG_CONF%" echo # NeuroX: forced port to avoid Hyper-V reserved range conflicts
+    >>"%PG_CONF%" echo port = %NEUROX_PG_PORT%
+    >>"%PG_CONF%" echo listen_addresses = 'localhost'
+    call :log "postgresql.conf patched"
+) else (
+    call :log "WARNING: postgresql.conf not found at %PG_CONF%"
+)
+
 REM Start PostgreSQL temporarily to create the database
 call :log "Starting PostgreSQL for database creation..."
 "%PG_BIN%\pg_ctl.exe" start -D "%PG_DATA%" -w -l "%LOG_DIR%\postgresql_setup.log" >> "%LOG_FILE%" 2>&1
@@ -158,7 +186,7 @@ REM emit zero log lines after pg_ctl start). Use goto for flow control.
 if not exist "%PG_BIN%\psql.exe" goto :finish
 
 call :log "Attempting to create 'neurox' database..."
-"%PG_BIN%\psql.exe" -U postgres -d postgres -c "CREATE DATABASE neurox;" >> "%LOG_FILE%" 2>&1
+"%PG_BIN%\psql.exe" -U postgres -h localhost -p %NEUROX_PG_PORT% -d postgres -c "CREATE DATABASE neurox;" >> "%LOG_FILE%" 2>&1
 set "CREATE_RC=!ERRORLEVEL!"
 if !CREATE_RC! equ 0 (
     call :log "Database 'neurox' created successfully"
@@ -168,7 +196,7 @@ if !CREATE_RC! equ 0 (
 
 REM Verify the database is reachable. If this fails, the DB really doesn't
 REM exist and we cannot continue with table init / user seeding.
-"%PG_BIN%\psql.exe" -U postgres -d neurox -c "SELECT 1" >> "%LOG_FILE%" 2>&1
+"%PG_BIN%\psql.exe" -U postgres -h localhost -p %NEUROX_PG_PORT% -d neurox -c "SELECT 1" >> "%LOG_FILE%" 2>&1
 if !ERRORLEVEL! neq 0 (
     call :log "ERROR: Cannot connect to 'neurox' DB - skipping init_db.py"
     goto :stop_pg
@@ -178,7 +206,7 @@ call :log "Verified 'neurox' DB is reachable"
 REM Run database initialization (create tables + seed default user)
 if not exist "%PYTHON%" goto :stop_pg
 call :log "Running init_db.py (tables + default admin user)..."
-set "DATABASE_URL=postgresql://postgres@localhost:5432/neurox"
+set "DATABASE_URL=postgresql://postgres@localhost:%NEUROX_PG_PORT%/neurox"
 "%PYTHON%" "%INSTALL_DIR%\backend_src\init_db.py" >> "%LOG_FILE%" 2>&1
 if !ERRORLEVEL! equ 0 (
     call :log "Database initialized (tables + default admin user 'admin')"
@@ -206,7 +234,7 @@ set "LAUNCHER=%INSTALL_DIR%\NeuroX.bat"
     echo set "INSTALL_DIR=%%~dp0"
     echo set "NEUROX_MODELS_DIR=%%INSTALL_DIR%%models\ocr"
     echo set "NEUROX_LOG_DIR=%%INSTALL_DIR%%logs"
-    echo set "DATABASE_URL=postgresql://postgres@localhost:5432/neurox"
+    echo set "DATABASE_URL=postgresql://postgres@localhost:55432/neurox"
     echo set "NEUROX_PG_DATA=%%PROGRAMDATA%%\NeuroX\pgdata17"
     echo.
     echo REM Clean up any stale postmaster.pid from a crash or unclean shutdown.

@@ -1,0 +1,6 @@
+2026-04-27 00:23:01.638 WAT [8716] LOG:  starting PostgreSQL 17.4 on x86_64-windows, compiled by msvc-19.42.34436, 64-bit
+2026-04-27 00:23:01.647 WAT [8716] LOG:  could not bind IPv6 address "::1": Permission denied
+2026-04-27 00:23:01.648 WAT [8716] LOG:  could not bind IPv4 address "127.0.0.1": Permission denied
+2026-04-27 00:23:01.648 WAT [8716] WARNING:  could not create listen socket for "localhost"
+2026-04-27 00:23:01.648 WAT [8716] FATAL:  could not create any TCP/IP sockets
+2026-04-27 00:23:01.651 WAT [8716] LOG:  database system is shut down

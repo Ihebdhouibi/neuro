@@ -1,0 +1,30 @@
+2026-04-27 00:23:00.073 | info | Frontend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-27 00:23:00.090 | info | App packaged: true
+2026-04-27 00:23:00.314 | info | Starting backend services...
+2026-04-27 00:23:00.316 | info | Starting PostgreSQL: C:\Program Files (x86)\NeuroX\pgsql\bin\pg_ctl.exe -D C:\ProgramData\NeuroX\pgdata17
+2026-04-27 00:23:02.048 | error | PostgreSQL failed to start (exit 1): pg_ctl : n'a pas pu d�marrer le serveur
+Examinez le journal applicatif.
+
+2026-04-27 00:23:02.051 | info | Starting backend (embedded python): C:\Program Files (x86)\NeuroX\python\python.exe C:\Program Files (x86)\NeuroX\backend_src\api\main_paddleocr.py
+2026-04-27 00:23:09.691 | info | Waiting for backend... (5/30)
+2026-04-27 00:23:16.704 | info | Waiting for backend... (10/30)
+2026-04-27 00:23:16.916 | warn | [backend] 2026-04-27 00:23:16 | INFO     | __main__:<module>:60 - Backend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-27 00:23:16.918 | warn | [backend] 2026-04-27 00:23:16 | INFO     | __main__:<module>:61 - Environment file: C:\Program Files (x86)\NeuroX\backend_src\.env (exists=True)
+2026-04-27 00:23:23.734 | info | Waiting for backend... (15/30)
+2026-04-27 00:23:30.824 | info | Waiting for backend... (20/30)
+2026-04-27 00:23:35.042 | info | Frontend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-27 00:23:35.060 | info | App packaged: true
+2026-04-27 00:23:35.064 | info | Another NeuroX instance is already running — exiting this one
+2026-04-27 00:23:37.024 | warn | [backend] INFO:     Started server process [6476]
+INFO:     Waiting for application startup.
+2026-04-27 00:23:37.397 | warn | [backend] 2026-04-27 00:23:37 | ERROR    | database:init_db:83 - \u274c Failed to initialize database: connection was closed in the middle of operation
+2026-04-27 00:23:37.398 | warn | [backend] 2026-04-27 00:23:37 | WARNING  | __main__:lifespan:221 - \u26a0\ufe0f Database initialization failed: connection was closed in the middle of operation
+2026-04-27 00:23:37 | INFO     | __main__:initialize_ocr:203 - Initializing RapidOCR (platform=Intel64 Family 6 Model 122 Stepping 8, GenuineIntel)
+2026-04-27 00:23:37.948 | info | Waiting for backend... (25/30)
+2026-04-27 00:23:44.601 | info | Waiting for backend... (30/30)
+2026-04-27 00:23:44.602 | warn | Backend did not become ready within timeout — app will load anyway
+2026-04-27 00:23:44.603 | info | Application ready — creating main window
+2026-04-27 00:23:54.826 | warn | [backend] 2026-04-27 00:23:54 | INFO     | __main__:_resolve_model_paths:195 - Using bundled RapidOCR models (shipped inside wheel)
+2026-04-27 00:23:57.570 | warn | [backend] 2026-04-27 00:23:57 | INFO     | __main__:initialize_ocr:206 - \u2705 RapidOCR (ONNX Runtime) initialized successfully
+2026-04-27 00:23:57.572 | warn | [backend] INFO:     Application startup complete.
+2026-04-27 00:23:57.573 | warn | [backend] INFO:     Uvicorn running on http://0.0.0.0:7861 (Press CTRL+C to quit)

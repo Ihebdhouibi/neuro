@@ -1,0 +1,34 @@
+2026-04-23 17:04:25.861 | INFO     | __main__:<module>:59 - Backend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-23 17:04:25.862 | INFO     | __main__:<module>:60 - Environment file: C:\Program Files (x86)\NeuroX\backend_src\.env (exists=True)
+2026-04-23 17:04:37.034 | ERROR    | database:init_db:83 - ❌ Failed to initialize database: Multiple exceptions: [Errno 10061] Connect call failed ('::1', 5432, 0, 0), [Errno 10061] Connect call failed ('127.0.0.1', 5432)
+2026-04-23 17:04:37.047 | WARNING  | __main__:lifespan:210 - ⚠️ Database initialization failed: Multiple exceptions: [Errno 10061] Connect call failed ('::1', 5432, 0, 0), [Errno 10061] Connect call failed ('127.0.0.1', 5432)
+2026-04-23 17:04:37.050 | INFO     | __main__:_register_paddle_dll_dirs:177 - Registered paddle DLL dir: C:\Program Files (x86)\NeuroX\python\lib\site-packages\paddle\libs
+2026-04-23 17:04:37.051 | INFO     | __main__:_register_paddle_dll_dirs:177 - Registered paddle DLL dir: C:\Program Files (x86)\NeuroX\python\Lib\site-packages\paddle\libs
+2026-04-23 17:04:42.683 | ERROR    | __main__:initialize_ocr:198 - Failed to initialize PaddleOCR: name 'libpaddle' is not defined
+2026-04-23 17:04:42.790 | ERROR    | __main__:initialize_ocr:199 - Full traceback:
+Traceback (most recent call last):
+  File "C:\Program Files (x86)\NeuroX\python\lib\site-packages\paddle\base\core.py", line 267, in <module>
+    from . import libpaddle
+ImportError: DLL load failed while importing libpaddle: Une routine d’initialisation d’une bibliothèque de liens dynamiques (DLL) a échoué.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "main_paddleocr.py", line 187, in initialize_ocr
+    from paddleocr import PaddleOCR
+  File "C:\Program Files (x86)\NeuroX\python\lib\site-packages\paddleocr\__init__.py", line 14, in <module>
+    from .paddleocr import *
+  File "C:\Program Files (x86)\NeuroX\python\lib\site-packages\paddleocr\paddleocr.py", line 21, in <module>
+    import paddle
+  File "C:\Program Files (x86)\NeuroX\python\lib\site-packages\paddle\__init__.py", line 38, in <module>
+    from .base import core  # noqa: F401
+  File "C:\Program Files (x86)\NeuroX\python\lib\site-packages\paddle\base\__init__.py", line 38, in <module>
+    from . import (  # noqa: F401
+  File "C:\Program Files (x86)\NeuroX\python\lib\site-packages\paddle\base\backward.py", line 28, in <module>
+    from . import core, framework, log_helper, unique_name
+  File "C:\Program Files (x86)\NeuroX\python\lib\site-packages\paddle\base\core.py", line 382, in <module>
+    if not avx_supported() and libpaddle.is_compiled_with_avx():
+NameError: name 'libpaddle' is not defined
+
+2026-04-23 17:04:42.791 | WARNING  | __main__:lifespan:215 - ⚠️ Failed to initialize OCR: name 'libpaddle' is not defined
+2026-04-23 17:04:42.799 | WARNING  | __main__:lifespan:216 - ⚠️ OCR features will be disabled
