@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from typing import Optional
+from loguru import logger
 from database import get_db
 from api import crud, schemas, models
 
@@ -176,9 +177,10 @@ async def signin(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Signin failed for username={!r}", signin_data.username)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Authentication failed: {str(e)}"
+            detail=f"Authentication failed: {type(e).__name__}: {e}"
         )
 
 @router.get("/me", response_model=schemas.UserResponse)

@@ -42,7 +42,7 @@ openai>=1.50,<2
 
 # Authentication
 passlib[bcrypt]>=1.7,<2
-bcrypt>=4.0,<6
+bcrypt>=4.0,<5
 
 # Utilities
 loguru>=0.7,<1
