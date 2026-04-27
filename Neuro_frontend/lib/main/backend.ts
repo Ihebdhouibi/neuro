@@ -1,7 +1,7 @@
 import { ChildProcess, spawn } from 'child_process'
 import { join } from 'path'
 import { app } from 'electron'
-import { existsSync } from 'fs'
+import { existsSync, openSync, closeSync, mkdirSync } from 'fs'
 import log from './logger'
 
 let backendProcess: ChildProcess | null = null
@@ -77,28 +77,42 @@ export async function startPostgres(): Promise<void> {
 
   log.info(`Starting PostgreSQL: ${pgCtl} -D ${dataDir}`)
 
+  // CRITICAL: pg_ctl forks the postmaster which inherits stdio handles. If we
+  // pipe stdout/stderr, the postmaster keeps the pipes open after pg_ctl exits,
+  // and Node's 'close' event NEVER fires — startPostgres() hangs forever, no
+  // window ever opens, and subsequent shortcut clicks all bounce off the
+  // single-instance lock ("app doesn't launch" symptom). Redirect to files so
+  // pg_ctl's 'close' event fires as soon as it exits.
+  const logsDir = join(installDir, 'logs')
+  try { mkdirSync(logsDir, { recursive: true }) } catch { /* ignore */ }
+  const pgCtlOutFile = join(logsDir, 'pg_ctl_start.txt')
+  let outFd: number
+  try {
+    outFd = openSync(pgCtlOutFile, 'w')
+  } catch (e) {
+    log.warn(`Could not open ${pgCtlOutFile}: ${(e as Error).message} — falling back to ignore`)
+    outFd = -1
+  }
+
   return new Promise((resolve) => {
-    const proc = spawn(pgCtl, ['start', '-D', dataDir, '-w', '-l', join(installDir, 'logs', 'postgresql.log')], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+    const proc = spawn(pgCtl, ['start', '-D', dataDir, '-w', '-l', join(logsDir, 'postgresql.log')], {
+      stdio: ['ignore', outFd >= 0 ? outFd : 'ignore', outFd >= 0 ? outFd : 'ignore'],
       windowsHide: true,
     })
 
-    let stdout = ''
-    let stderr = ''
-    proc.stdout?.on('data', (d) => { stdout += d.toString() })
-    proc.stderr?.on('data', (d) => { stderr += d.toString() })
-
     proc.on('close', (code) => {
+      if (outFd >= 0) { try { closeSync(outFd) } catch { /* ignore */ } }
       if (code === 0) {
         log.info('PostgreSQL started successfully')
         resolve()
       } else {
-        log.error(`PostgreSQL failed to start (exit ${code}): ${stderr || stdout}`)
+        log.error(`PostgreSQL failed to start (exit ${code}) — see ${pgCtlOutFile}`)
         // Don't reject — app can still run if PostgreSQL is already running or user has system install
         resolve()
       }
     })
     proc.on('error', (err) => {
+      if (outFd >= 0) { try { closeSync(outFd) } catch { /* ignore */ } }
       log.error(`Failed to spawn pg_ctl: ${err.message}`)
       resolve() // non-fatal
     })
