@@ -1,7 +1,0 @@
-2026-04-27 13:47:19.248 | INFO     | __main__:<module>:60 - Backend log directory: C:\Program Files (x86)\NeuroX\logs
-2026-04-27 13:47:19.263 | INFO     | __main__:<module>:61 - Environment file: C:\Program Files (x86)\NeuroX\backend_src\.env (exists=True)
-2026-04-27 13:47:43.216 | ERROR    | database:init_db:83 - ❌ Failed to initialize database: database "neurox" does not exist
-2026-04-27 13:47:43.216 | WARNING  | __main__:lifespan:221 - ⚠️ Database initialization failed: database "neurox" does not exist
-2026-04-27 13:47:43.216 | INFO     | __main__:initialize_ocr:203 - Initializing RapidOCR (platform=Intel64 Family 6 Model 122 Stepping 8, GenuineIntel)
-2026-04-27 13:48:12.427 | INFO     | __main__:_resolve_model_paths:195 - Using bundled RapidOCR models (shipped inside wheel)
-2026-04-27 13:48:16.282 | INFO     | __main__:initialize_ocr:206 - ✅ RapidOCR (ONNX Runtime) initialized successfully

@@ -33,6 +33,9 @@ installer/resources/
 # Logs and local config
 logs/
 *.log
+*.log.txt
+db logs/
+new logs/
 .env
 .env.local
 

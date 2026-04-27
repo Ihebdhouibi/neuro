@@ -1,6 +1,0 @@
-2026-04-23 21:29:07.086 WAT [13756] FATAL:  database files are incompatible with server
-2026-04-23 21:29:07.086 WAT [13756] DETAIL:  The data directory was initialized by PostgreSQL version 13, which is not compatible with this version 17.4.
-2026-04-23 21:29:17.220 WAT [9168] FATAL:  database files are incompatible with server
-2026-04-23 21:29:17.220 WAT [9168] DETAIL:  The data directory was initialized by PostgreSQL version 13, which is not compatible with this version 17.4.
-2026-04-23 21:29:37.626 WAT [14536] FATAL:  database files are incompatible with server
-2026-04-23 21:29:37.626 WAT [14536] DETAIL:  The data directory was initialized by PostgreSQL version 13, which is not compatible with this version 17.4.
