@@ -1,0 +1,29 @@
+2026-04-27 13:46:43.918 | info | Frontend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-27 13:46:44.026 | info | App packaged: true
+2026-04-27 13:46:44.845 | info | Starting backend services...
+2026-04-27 13:46:44.848 | info | Found existing postmaster.pid at C:\ProgramData\NeuroX\pgdata17\postmaster.pid — checking if PG is actually running
+2026-04-27 13:46:49.369 | info | PostgreSQL is already running — skipping start
+2026-04-27 13:46:49.374 | info | Starting backend (embedded python): C:\Program Files (x86)\NeuroX\python\python.exe C:\Program Files (x86)\NeuroX\backend_src\api\main_paddleocr.py
+2026-04-27 13:46:57.562 | info | Waiting for backend... (5/30)
+2026-04-27 13:47:05.022 | info | Waiting for backend... (10/30)
+2026-04-27 13:47:19.251 | warn | [backend] 2026-04-27 13:47:19 | INFO     | __main__:<module>:60 - Backend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-27 13:47:19.268 | warn | [backend] 2026-04-27 13:47:19 | INFO     | __main__:<module>:61 - Environment file: C:\Program Files (x86)\NeuroX\backend_src\.env (exists=True)
+2026-04-27 13:47:21.893 | info | Waiting for backend... (15/30)
+2026-04-27 13:47:37.845 | info | Waiting for backend... (20/30)
+2026-04-27 13:47:42.697 | warn | [backend] INFO:     Started server process [7772]
+2026-04-27 13:47:42.701 | warn | [backend] INFO:     Waiting for application startup.
+2026-04-27 13:47:43.214 | warn | [backend] 2026-04-27 13:47:43 | ERROR    | database:init_db:83 - \u274c Failed to initialize database: database "neurox" does not exist
+2026-04-27 13:47:43 | WARNING  | __main__:lifespan:221 - \u26a0\ufe0f Database initialization failed: database "neurox" does not exist
+2026-04-27 13:47:43 | INFO     | __main__:initialize_ocr:203 - Initializing RapidOCR (platform=Intel64 Family 6 Model 122 Stepping 8, GenuineIntel)
+2026-04-27 13:47:46.013 | info | Waiting for backend... (25/30)
+2026-04-27 13:47:53.826 | info | Waiting for backend... (30/30)
+2026-04-27 13:47:53.829 | warn | Backend did not become ready within timeout — app will load anyway
+2026-04-27 13:47:53.836 | info | Application ready — creating main window
+2026-04-27 13:48:06.925 | info | Frontend log directory: C:\Program Files (x86)\NeuroX\logs
+2026-04-27 13:48:06.988 | info | App packaged: true
+2026-04-27 13:48:07.005 | info | Another NeuroX instance is already running — exiting this one
+2026-04-27 13:48:12.422 | warn | [backend] 2026-04-27 13:48:12 | INFO     | __main__:_resolve_model_paths:195 - Using bundled RapidOCR models (shipped inside wheel)
+2026-04-27 13:48:16.285 | warn | [backend] 2026-04-27 13:48:16 | INFO     | __main__:initialize_ocr:206 - \u2705 RapidOCR (ONNX Runtime) initialized successfully
+2026-04-27 13:48:16.295 | warn | [backend] INFO:     Application startup complete.
+2026-04-27 13:48:16.301 | warn | [backend] INFO:     Uvicorn running on http://0.0.0.0:7861 (Press CTRL+C to quit)
+2026-04-27 13:48:32.051 | info | [backend] INFO:     127.0.0.1:57631 - "POST /auth/signin HTTP/1.1" 500 Internal Server Error

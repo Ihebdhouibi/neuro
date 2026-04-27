@@ -160,9 +160,18 @@ if exist "%PG_CONF%" (
     call :log "WARNING: postgresql.conf not found at %PG_CONF%"
 )
 
-REM Start PostgreSQL temporarily to create the database
+REM Start PostgreSQL temporarily to create the database.
+REM
+REM IMPORTANT: do NOT redirect pg_ctl's stdout/stderr to %LOG_FILE%. On
+REM Windows, the spawned postmaster INHERITS the parent cmd's redirected
+REM standard handles. If we point them at %LOG_FILE%, postmaster keeps that
+REM file handle open for its entire lifetime, which prevents subsequent
+REM `>>` appends in this script from working (cmd silently stops logging
+REM and the rest of setup never runs). v1.0.5 hit this exact bug as soon as
+REM PG actually managed to start. Redirect to a dedicated file instead, so
+REM postmaster's inherited handle is on a file we don't need to write again.
 call :log "Starting PostgreSQL for database creation..."
-"%PG_BIN%\pg_ctl.exe" start -D "%PG_DATA%" -w -l "%LOG_DIR%\postgresql_setup.log" >> "%LOG_FILE%" 2>&1
+"%PG_BIN%\pg_ctl.exe" start -D "%PG_DATA%" -w -l "%LOG_DIR%\postgresql_setup.log" > "%LOG_DIR%\pg_ctl_start.txt" 2>&1
 call :log "pg_ctl start returned !ERRORLEVEL!"
 
 REM NOTE: do NOT use `timeout` here. Inno Setup runs this bat with the
