@@ -26,10 +26,20 @@ export const WindowContextProvider = ({
   titlebar?: TitlebarProps
 }) => {
   const [initProps, setInitProps] = useState<WindowInitProps>()
-  const { windowInit } = useConveyor('window')
+
+  // Safe access to conveyor — guards against the bridge being unavailable
+  // (e.g. when running in a non-Electron context or before preload finishes)
+  const conveyorWindow = useConveyor('window')
+  const windowInit = conveyorWindow?.windowInit
 
   useEffect(() => {
-    windowInit().then(setInitProps)
+    if (windowInit) {
+      windowInit()
+        .then(setInitProps)
+        .catch((err: unknown) => {
+          console.warn('windowInit failed:', err)
+        })
+    }
 
     // Add class to parent element
     const parent = document.querySelector('.window-content')?.parentElement

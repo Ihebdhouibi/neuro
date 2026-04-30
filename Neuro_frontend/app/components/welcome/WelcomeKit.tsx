@@ -65,11 +65,11 @@ export const WelcomingPage = () => {
 
   return (
     <main 
-      className="w-screen h-screen flex items-center justify-center overflow-auto transition-colors duration-500"
+      className="w-screen h-screen flex items-center justify-center overflow-hidden transition-colors duration-500"
       style={{ backgroundColor: colors.background }}
     >
-      {/* Fixed design canvas with responsive container */}
-      <div className="relative" style={{ width: 1440, height: 1024, minWidth: 1200, minHeight: 800 }}>
+      {/* Fixed design canvas */}
+      <div className="relative" style={{ width: 1440, height: 1024 }}>
         {/* LEFT COLUMN */}
         <section className="flex flex-col w-[515px] items-center gap-8 absolute top-[calc(50%_-_223px)] left-[137px]">
           <div className="relative w-[300px] h-[300px] bg-[url(res://icons/logo-light-1.png)] bg-no-repeat bg-contain bg-center" />
@@ -87,6 +87,24 @@ export const WelcomingPage = () => {
               Une intelligence discrete pour une experience digitale sobre,
               elegante et sans limites
             </p>
+          </div>
+
+          {/* NEW BUTTONS: Neurobase & Neuropacks */}
+          <div className="flex gap-4 mt-8">
+            <Button
+              onClick={() => navigate("/neurobase")}
+              className="px-6 py-2 rounded-full"
+              style={{ background: colors.buttonBg, color: colors.buttonText }}
+            >
+              Neurobase
+            </Button>
+            <Button
+              onClick={() => navigate("/neuropacks")}
+              className="px-6 py-2 rounded-full"
+              style={{ background: colors.buttonBg, color: colors.buttonText }}
+            >
+              Neuropacks
+            </Button>
           </div>
         </section>
 
@@ -181,6 +199,31 @@ export const WelcomingPage = () => {
           >
             EXPLORER
           </span>
+        </Button>
+      </div>
+
+      {/* FIXED BUTTONS - always visible at bottom center */}
+      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4 z-50">
+        <Button
+          onClick={() => navigate("/login")}
+          className="px-6 py-2 rounded-full shadow-lg"
+          style={{ background: colors.buttonBg, color: colors.buttonText }}
+        >
+          Connexion
+        </Button>
+        <Button
+          onClick={() => navigate("/register")}
+          className="px-6 py-2 rounded-full shadow-lg"
+          style={{ background: colors.buttonBg, color: colors.buttonText }}
+        >
+          Inscription
+        </Button>
+        <Button
+          onClick={() => navigate("/ocr")}
+          className="px-6 py-2 rounded-full shadow-lg"
+          style={{ background: colors.buttonBg, color: colors.buttonText }}
+        >
+          OCR
         </Button>
       </div>
     </main>

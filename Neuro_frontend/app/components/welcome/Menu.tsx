@@ -159,6 +159,15 @@ export const MenuPage: React.FC = () => {
       className="relative w-[1440px] h-[1024px] transition-colors duration-500"
       style={{ backgroundColor: colors.background }}
     >
+      {/* Home button */}
+      <button
+        onClick={() => navigate("/")}
+        className="fixed top-[80px] left-4 z-[100] flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
+        aria-label="Retour à l'accueil"
+      >
+        🏠
+      </button>
+
       <img
         className="absolute top-[calc(50%-512px)] left-[calc(50%-720px)] w-[1440px] h-[1024px] object-cover transition-all duration-500"
         alt="bg"

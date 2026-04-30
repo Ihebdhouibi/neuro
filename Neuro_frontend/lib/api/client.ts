@@ -54,11 +54,33 @@ export interface ProcessingJob {
 export interface ParseResponse {
   success: boolean;
   message: string;
+  // Raw OCR text
+  content?: string;
+  // Structured data extracted by ocr_to_schema
+  extract?: {
+    form_date?: string;
+    fse_number?: string;
+    patient?: {
+      last_name?: string;
+      first_name?: string;
+      nir?: string;
+      birth_date?: string;
+      ipp?: string;
+    };
+    doctor?: {
+      full_name?: string;
+      rpps?: string;
+    };
+    orthoptic_care?: {
+      description?: string;
+      acts_prescribed?: string[];
+    };
+    ocr_raw_text?: string;
+  } & Record<string, any>;
+  // Legacy fields (kept for compatibility)
   output_dir?: string;
   files?: string[];
   download_url?: string;
-  content?: string;
-  extract?: Record<string, any>;
   dataframe?: any[][];
 }
 
@@ -241,6 +263,44 @@ class ApiClient {
     return response.json();
   }
 
+  /**
+   * Full pipeline: OCR -> structured data -> PDF generation.
+   * Uses /parse-and-generate endpoint. Returns pdf_path, thumbnail_path, edm_path.
+   */
+  async parseAndGenerate(
+    file: File,
+    options?: {
+      finess?: string;
+      city?: string;
+      edm_base_path?: string;
+    }
+  ): Promise<PrescriptionResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const params = new URLSearchParams();
+    if (options?.finess) params.set('finess', options.finess);
+    if (options?.city) params.set('city', options.city);
+    if (options?.edm_base_path) params.set('edm_base_path', options.edm_base_path);
+
+    const response = await fetch(
+      `${this.baseURL}/parse-and-generate?${params}`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({
+        message: response.statusText,
+      }));
+      throw new Error(error.detail || 'Failed to generate prescription');
+    }
+
+    return response.json();
+  }
+
   async performOCRTask(file: File, taskType: string): Promise<TaskResponse> {
     const formData = new FormData();
     formData.append('file', file);
@@ -272,6 +332,11 @@ class ApiClient {
   // Utility method to get download URL
   getDownloadUrl(path: string): string {
     return `${this.baseURL}${path}`;
+  }
+
+  // Accessor for the resolved base URL (useful for components doing raw fetches)
+  getBaseUrl(): string {
+    return this.baseURL;
   }
 }
 
