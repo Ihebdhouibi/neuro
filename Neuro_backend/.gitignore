@@ -56,3 +56,4 @@ model_weight
 # Generated prescriptions (runtime output)
 templates/prescription/filled/
 
+neurox.db
