@@ -67,6 +67,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         finally:
             await session.close()
 
+
 async def init_db():
     """
     Initialize database - create all tables
@@ -76,9 +77,9 @@ async def init_db():
             # Import all models here to ensure they're registered
             from api import models  # noqa: F401
             
-            # Create all tables
+            # Create all tables (y compris les nouvelles)
             await conn.run_sync(Base.metadata.create_all)
-            logger.info("✅ Database tables created successfully")
+            logger.info("✅ Database tables created successfully (centers, practitioners, templates, prescriptions)")
     except Exception as e:
         logger.error(f"❌ Failed to initialize database: {e}")
         raise
