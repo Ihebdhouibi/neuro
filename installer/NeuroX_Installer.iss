@@ -20,7 +20,7 @@
 ; ===========================================================================
 
 #define MyAppName      "NeuroX"
-#define MyAppVersion   "1.0.10"
+#define MyAppVersion   "1.0.11"
 #define MyAppPublisher "NeuroX Team"
 #define MyAppExeName   "ElectronReactApp.exe"
 #define BundleDir      "..\installer\bundle"
@@ -78,6 +78,9 @@ Source: "{#BundleDir}\models\*"; DestDir: "{app}\models"; Flags: ignoreversion r
 
 ; PostgreSQL portable
 Source: "{#BundleDir}\pgsql\*"; DestDir: "{app}\pgsql"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; LibreOffice headless (for DOCX -> PDF conversion, replaces docx2pdf/MS Word dependency)
+Source: "{#BundleDir}\libreoffice\*"; DestDir: "{app}\libreoffice"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Backend source code
 Source: "{#BundleDir}\backend_src\*"; DestDir: "{app}\backend_src"; Excludes: "templates\prescription\filled\*,templates\prescription\filled,__pycache__,*.pyc"; Flags: ignoreversion recursesubdirs createallsubdirs

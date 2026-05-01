@@ -30,7 +30,7 @@ function Log($msg) {
 }
 
 # --- Create folder structure ---
-foreach ($sub in @("python", "wheels", "models", "pgsql", "frontend", "backend_src", "logs")) {
+foreach ($sub in @("python", "wheels", "models", "pgsql", "libreoffice", "frontend", "backend_src", "logs")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $BundleDir $sub) | Out-Null
 }
 Log "Bundle directory: $BundleDir"
@@ -179,6 +179,72 @@ if (-not (Test-Path (Join-Path (Join-Path $pgsqlDir "bin") "pg_ctl.exe"))) {
     }
 } else {
     Log "PostgreSQL portable already present -- skipping"
+}
+
+# ==========================================================================
+# 4b. LIBREOFFICE PORTABLE (DOCX -> PDF conversion via headless soffice)
+# ==========================================================================
+# We extract from the official LibreOffice MSI using msiexec /a (admin install,
+# no actual install on the build machine). Result: program/soffice.exe + share/.
+$loDir   = Join-Path $BundleDir "libreoffice"
+$loVer   = "25.8.6"
+$loMsiUrl = "https://download.documentfoundation.org/libreoffice/stable/$loVer/win/x86_64/LibreOffice_${loVer}_Win_x86-64.msi"
+$loMsi   = Join-Path $BundleDir "libreoffice.msi"
+$loExtract = Join-Path $BundleDir "libreoffice_extract"
+
+if (-not (Test-Path (Join-Path $loDir "program\soffice.exe"))) {
+    Log "Downloading LibreOffice $loVer (~340 MB) ..."
+    Invoke-WebRequest -Uri $loMsiUrl -OutFile $loMsi -UseBasicParsing
+    Log "Extracting LibreOffice MSI (admin install) ..."
+    if (Test-Path $loExtract) { Remove-Item -Recurse -Force $loExtract }
+    New-Item -ItemType Directory -Force $loExtract | Out-Null
+    & msiexec.exe /a "$loMsi" /qn TARGETDIR="$loExtract" 2>&1 | ForEach-Object { Log "  msi: $_" }
+
+    # Result tree: $loExtract\LibreOffice\program\soffice.exe + share\
+    $loRoot = Join-Path $loExtract "LibreOffice"
+    if (-not (Test-Path (Join-Path $loRoot "program\soffice.exe"))) {
+        # Some MSI versions extract directly without the LibreOffice/ wrapper
+        $loRoot = $loExtract
+    }
+    if (Test-Path (Join-Path $loRoot "program\soffice.exe")) {
+        if (Test-Path $loDir) { Remove-Item -Recurse -Force $loDir }
+        New-Item -ItemType Directory -Force $loDir | Out-Null
+        # Copy contents of extracted root, excluding the MSI itself
+        Get-ChildItem $loRoot -Exclude "libreoffice.msi","*.msi" |
+            Copy-Item -Destination $loDir -Recurse -Force
+
+        # Trim subfolders we don't need for headless PDF conversion.
+        # share\extensions (~460 MB: dictionaries, language tools, java extensions)
+        # and program\resource\* (UI translations, ~260 MB; keep en-US + fr only)
+        # are not needed for DOCX->PDF rendering. Trim verified safe by smoke test.
+        foreach ($trim in @("help", "readmes", "share\Scripts", "share\gallery", "share\samples", "share\template", "share\extensions")) {
+            $tp = Join-Path $loDir $trim
+            if (Test-Path $tp) {
+                Log "  trimming $trim"
+                Remove-Item -Recurse -Force $tp
+            }
+        }
+
+        # Trim program\resource: keep only en-US and fr UI translation .res files
+        $resDir = Join-Path $loDir "program\resource"
+        if (Test-Path $resDir) {
+            Log "  trimming program\resource (keep en-US, fr)"
+            Get-ChildItem $resDir -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -notin @('en-US','fr') } |
+                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            Get-ChildItem $resDir -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -notmatch '_(en-US|fr)\.res$' } |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+        Log "LibreOffice runtime placed in $loDir"
+    } else {
+        Log "WARNING: soffice.exe not found after MSI extract -- DOCX->PDF will fail"
+    }
+
+    Remove-Item $loMsi -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $loExtract -ErrorAction SilentlyContinue
+} else {
+    Log "LibreOffice portable already present -- skipping"
 }
 
 # ==========================================================================

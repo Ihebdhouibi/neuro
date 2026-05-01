@@ -7,6 +7,8 @@ This survives template edits in Word that collapse/insert paragraphs.
 """
 
 import os
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -425,6 +427,107 @@ def fill_prescription_template(
     return str(filled_path)
 
 
+# ---------------------------------------------------------------------------
+# DOCX → PDF conversion via bundled LibreOffice (headless).
+# Replaces the previous docx2pdf path so we no longer depend on Microsoft Word.
+# ---------------------------------------------------------------------------
+
+def _find_soffice() -> Optional[str]:
+    """Locate the soffice executable.
+
+    Resolution order:
+      1. NEUROX_SOFFICE env var (explicit override)
+      2. <app>/libreoffice/program/soffice.exe   (production install)
+      3. <app>/libreoffice/App/libreoffice/program/soffice.exe  (PortableApps layout)
+      4. PATH lookup (developer machine with LibreOffice installed)
+    """
+    candidates: List[Path] = []
+
+    env = os.environ.get("NEUROX_SOFFICE")
+    if env:
+        candidates.append(Path(env))
+
+    # __file__ lives in <app>/backend_src/fill_template.py
+    app_root = Path(__file__).resolve().parent.parent
+    candidates.append(app_root / "libreoffice" / "program" / "soffice.exe")
+    candidates.append(app_root / "libreoffice" / "App" / "libreoffice" / "program" / "soffice.exe")
+
+    from shutil import which
+    for name in ("soffice.exe", "soffice"):
+        found = which(name)
+        if found:
+            candidates.append(Path(found))
+
+    for c in candidates:
+        try:
+            if c and c.exists():
+                return str(c)
+        except OSError:
+            continue
+    return None
+
+
+def _convert_docx_to_pdf(docx_path: str, output_pdf_path: str, timeout: int = 120) -> str:
+    """Convert a .docx file to PDF using bundled LibreOffice headless.
+
+    Each invocation uses a temporary UserInstallation profile so concurrent jobs
+    don't collide on LibreOffice's per-user lockfile.
+    """
+    soffice = _find_soffice()
+    if not soffice:
+        raise RuntimeError(
+            "LibreOffice (soffice) not found. "
+            "Bundle it under <app>/libreoffice/program/soffice.exe or set NEUROX_SOFFICE."
+        )
+
+    out_dir = Path(output_pdf_path).parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="lo_profile_") as profile_dir:
+        # soffice expects a file:// URI for UserInstallation.
+        profile_uri = "file:///" + profile_dir.replace("\\", "/").lstrip("/")
+        cmd = [
+            soffice,
+            f"-env:UserInstallation={profile_uri}",
+            "--headless",
+            "--norestore",
+            "--nologo",
+            "--nofirststartwizard",
+            "--convert-to", "pdf",
+            "--outdir", str(out_dir),
+            docx_path,
+        ]
+        logger.debug(f"soffice cmd: {cmd}")
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                # Hide console window when frozen / called from electron-spawned python
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"LibreOffice conversion timed out after {timeout}s") from e
+
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(f"LibreOffice failed (exit {result.returncode}): {err}")
+
+    # soffice writes <stem>.pdf into --outdir, regardless of the requested filename.
+    expected = out_dir / (Path(docx_path).stem + ".pdf")
+    if not expected.exists():
+        raise RuntimeError(f"LibreOffice produced no PDF (expected {expected})")
+
+    target = Path(output_pdf_path)
+    if expected.resolve() != target.resolve():
+        if target.exists():
+            target.unlink()
+        expected.rename(target)
+
+    return str(target)
+
+
 def fill_and_convert_to_pdf(
     extraction_data: Dict,
     output_pdf_path: str,
@@ -453,16 +556,15 @@ def fill_and_convert_to_pdf(
     os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
 
     try:
-        from docx2pdf import convert
-        convert(filled_docx, output_pdf_path)
+        _convert_docx_to_pdf(filled_docx, output_pdf_path)
         logger.info(f"PDF generated: {output_pdf_path}")
     except Exception as e:
-        logger.error(f"docx2pdf conversion failed: {e}")
+        logger.error(f"PDF conversion failed: {e}")
         raise
-
-    try:
-        os.unlink(filled_docx)
-    except OSError:
-        pass
+    finally:
+        try:
+            os.unlink(filled_docx)
+        except OSError:
+            pass
 
     return output_pdf_path

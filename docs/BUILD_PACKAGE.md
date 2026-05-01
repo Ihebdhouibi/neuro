@@ -162,7 +162,7 @@ Get-ChildItem "$bundle\backend_src" -Filter __pycache__ -Recurse -Directory |
 Sanity check the bundle:
 
 ```powershell
-foreach ($d in 'frontend','python','wheels','models','pgsql','backend_src') {
+foreach ($d in 'frontend','python','wheels','models','pgsql','libreoffice','backend_src') {
     $sz = (Get-ChildItem "$bundle\$d" -Recurse -EA 0 |
         Measure-Object Length -Sum).Sum / 1MB
     "{0,-15} {1,8:N1} MB" -f $d, $sz
