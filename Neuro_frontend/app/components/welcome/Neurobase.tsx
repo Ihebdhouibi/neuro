@@ -100,6 +100,14 @@ export const Neurobase = () => {
       className="relative w-full min-h-screen transition-colors duration-500"
       style={{ backgroundColor: colors.background }}
     >
+      {/* Home button */}
+      <button
+        onClick={() => navigate("/")}
+        className="fixed top-24 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
+        aria-label="Accueil"
+      >
+        🏠
+      </button>
       <img
         className="absolute inset-0 w-full h-full object-cover transition-all duration-500"
         alt="Background"

@@ -13,6 +13,7 @@ Key fixes:
 
 import re
 from typing import Dict, List, Optional
+from loguru import logger
 
 
 # ── Patterns to DISCARD ──────────────────────────────────────────────────────
@@ -295,7 +296,10 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
     for idx, item in enumerate(ocr_results):
         text = item.get("text", "")
         conf = item.get("confidence", 0)
-
+        # Mark important lines to bypass noise filter
+        is_important = ('prescripteur' in text.lower() or
+                        'operateur' in text.lower() or
+                        'rpps' in text.lower())
         # ── PRE-FILTER ────────────────────────────────────────────────────────
 
         # RPPS
@@ -316,17 +320,21 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
                 if d not in fields["dates"]:
                     fields["dates"].append(d)
 
-        # Prescripteur → real doctor
-        if _is_prescripteur_line(text) and fields["prescriber"] is None:
+        # Prescripteur → real doctor (enhanced)
+        if ('prescripteur' in text.lower() or _is_prescripteur_line(text)) and fields["prescriber"] is None:
+            logger.info(f"Prescriber line detected: {text}")
             name = _extract_name_after_colon(text)
             if name:
                 fields["prescriber"] = name
+                logger.info(f"Extracted prescriber name from colon: {name}")
             else:
+                # Look at the next line(s) for an uppercase name
                 next_idx = idx + 1
                 while next_idx < len(all_texts):
                     next_text = all_texts[next_idx].strip()
                     if _is_uppercase_name(next_text):
                         fields["prescriber"] = next_text
+                        logger.info(f"Extracted prescriber name from next line: {next_text}")
                         break
                     elif next_text:
                         break
@@ -342,15 +350,20 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
         prescriber_from_amount = _extract_prescriber_from_amount_line(text)
         if prescriber_from_amount and fields["prescriber"] is None:
             fields["prescriber"] = prescriber_from_amount
+            logger.info(f"Extracted prescriber from amount line: {prescriber_from_amount}")
 
         # IPP
         ipp_extracted = _extract_ipp_from_line(text)
         if ipp_extracted and fields["ipp"] is None:
             fields["ipp"] = ipp_extracted
 
-        # ── Noise filter ──────────────────────────────────────────────────────
-        if is_noise(text, conf):
+        # ── Noise filter (skip important lines) ──────────────────────────────────
+        if not is_important and is_noise(text, conf):
             continue
+
+        # Debug AMY detection
+        if 'AMY' in text.upper():
+            logger.info(f"AMY candidate: text='{text}', confidence={conf}")
 
         field_type = classify_field(text)
         entry = {"text": text, "confidence": conf}
@@ -361,7 +374,7 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
         # ── Populate fields ───────────────────────────────────────────────────
         if field_type == "amy_code":
             fields["amy_codes"].append(text)
-
+            logger.info(f"AMY code added: {text}")
         elif field_type == "prescriber":
             if _is_prescripteur_line(text) and fields["prescriber"] is None:
                 fields["prescriber"] = _extract_name_after_colon(text)
@@ -407,7 +420,8 @@ def filter_frame_ocr(ocr_results: List[Dict]) -> Dict:
     # ── Final: Opérateur fallback ─────────────────────────────────────────────
     if fields["prescriber"] is None and fields["operateur"]:
         fields["prescriber"] = fields["operateur"]
-
+    logger.info(f"Final prescriber: {fields['prescriber']}")
+    logger.info(f"Final AMY codes: {fields['amy_codes']}")
     return {
         "relevant_texts": relevant,
         "detected_fields": fields,

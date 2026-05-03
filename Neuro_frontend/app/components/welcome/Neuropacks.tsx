@@ -131,6 +131,15 @@ export const NeuropacksLight: React.FC = () => {
       className="relative w-[1440px] h-[1024px] overflow-hidden transition-colors duration-500"
       style={{ backgroundColor: colors.background }}
     >
+        {/* Home button */}
+        <button
+          onClick={() => navigate("/")}
+          className="fixed top-24 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
+          aria-label="Accueil"
+        >
+          🏠
+        </button>
+
         {/* Backgrounds */}
         <img 
           className="absolute top-0 left-1 w-[1440px] h-[900px] object-cover transition-all duration-500" 

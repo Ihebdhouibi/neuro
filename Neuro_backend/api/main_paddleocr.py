@@ -6,29 +6,72 @@ Simplified version for window capture screenshot processing
 import zipfile
 import shutil
 import os
+import sys
+import platform
 import tempfile
 import uuid
-from typing import Optional
+import re
+import time
+import smtplib
+from typing import Optional, Dict
 from pathlib import Path
 import asyncio
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from datetime import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
-load_dotenv(r"C:/Users/hp/Downloads/neuro/Neuro_backend/.env")
-print("EDM_BASE_PATH from env:", os.getenv("EDM_BASE_PATH"))
-print("CENTER_FINESS from env:", os.getenv("CENTER_FINESS"))
+# ── Resolve paths relative to this file (works in dev and bundled installs) ──
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BACKEND_DIR.parent
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+# Load .env from backend root (next to api/), fallback to project root
+_env_path = BACKEND_DIR / ".env"
+if not _env_path.exists():
+    _env_path = PROJECT_ROOT / ".env"
+load_dotenv(str(_env_path))
+# After loading .env, also load center_config.env
+_center_config = BACKEND_DIR / "center_config.env"
+if _center_config.exists():
+    load_dotenv(str(_center_config))
+    logger.info(f"Loaded center config from: {_center_config}")
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from tempfile import gettempdir
 from loguru import logger
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-import sys
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# ── Logging configuration ────────────────────────────────────────────────────
+# Determine log directory: NEUROX_LOG_DIR env var → {project_root}/logs
+LOG_DIR = Path(os.getenv("NEUROX_LOG_DIR", str(PROJECT_ROOT / "logs")))
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# Remove default stderr handler and re-add with consistent format
+logger.remove()
+logger.add(
+    sys.stderr,
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level:<8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+)
+logger.add(
+    str(LOG_DIR / "backend_{time:YYYY-MM-DD}.log"),
+    rotation="10 MB",
+    retention="30 days",
+    compression="zip",
+    level=os.getenv("LOG_LEVEL", "DEBUG"),
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {name}:{function}:{line} - {message}",
+    encoding="utf-8",
+)
+
+logger.info(f"Backend log directory: {LOG_DIR}")
+logger.info(f"Environment file: {_env_path} (exists={_env_path.exists()})")
+
+sys.path.append(str(BACKEND_DIR))
 from database import init_db, close_db
 
 # ── Center config from .env ──────────────────────────────────────────────────
@@ -42,8 +85,58 @@ def get_center_info() -> dict:
 
 CENTER_FINESS  = os.getenv("CENTER_FINESS",  "920036563")
 CENTER_CITY    = os.getenv("CENTER_CITY",    "Nanterre")
-EDM_BASE_PATH  = os.getenv("EDM_BASE_PATH",  "C:/temp/fse_ocr")
+EDM_BASE_PATH  = os.getenv("EDM_BASE_PATH",  "EDM_BASE_PATH")
 GALAXIE_EDM    = os.getenv("GALAXIE_EDM",    "D:/Stimut/Documents_Patients")
+# Add validation
+if not EDM_BASE_PATH:
+    logger.warning("EDM_BASE_PATH not set in environment")
+if not GALAXIE_EDM:
+    logger.warning("GALAXIE_EDM not set in environment")
+
+# ── Internal database mock (B2/FSE mapping) ─────────────────────────────────
+# Used by the /b2-lookup endpoint for the semi-automatic prescription flow.
+# In production this should be replaced with a real DB query.
+B2_MAPPING: Dict[str, dict] = {
+    "553381": {
+        "patient": {
+            "lastName": "DUPONT",
+            "firstName": "JEAN",
+            "ssn": "1 77 03 99 312 069 78",
+            "ipp": "15035",
+        },
+        "amy_code": "AMY 8",
+        "prescriber_initials": "DM",
+        "finess": "920036563",
+        "fse_number": "553381",
+    },
+    "95990": {
+        "patient": {
+            "lastName": "WESOLOWSKA-EISL",
+            "firstName": "NINA",
+            "ssn": "2 06 12 99 622 925",
+            "ipp": "78950",
+        },
+        "amy_code": "AMY 8",
+        "prescriber_initials": "DM",
+        "finess": "920036563",
+        "fse_number": "95990",
+    },
+}
+
+
+# ── Async job store for progress tracking ───────────────────────────────────
+# Maps job_id -> {progress, message, result, finished, updated_at}
+job_store: Dict[str, dict] = {}
+
+
+def update_job_progress(job_id: str, progress: int, message: str = "", result: Optional[dict] = None) -> None:
+    job_store[job_id] = {
+        "progress": progress,
+        "message": message,
+        "result": result,
+        "finished": progress >= 100,
+        "updated_at": datetime.now().isoformat(),
+    }
 
 
 # ── EDM path helpers ─────────────────────────────────────────────────────────
@@ -118,22 +211,64 @@ class PrescriptionResponse(BaseModel):
     error: Optional[str] = None
 
 # ── OCR engine ───────────────────────────────────────────────────────────────
+# Using RapidOCR (ONNX Runtime backend) instead of PaddleOCR:
+#  - Runs on any x86_64 CPU (no AVX/AVX2 requirement).
+#  - Default PP-OCR models are bundled inside the rapidocr-onnxruntime wheel,
+#    so the engine works fully offline with no extra model downloads.
+#  - Override bundled models via NEUROX_MODELS_DIR (directory containing
+#    det.onnx / rec.onnx / cls.onnx) if a custom model set is shipped.
 ocr_engine = None
+
+
+def _resolve_model_paths() -> dict:
+    """Return kwargs overriding RapidOCR's bundled models, if found on disk.
+
+    Looks for files named det.onnx / rec.onnx / cls.onnx in:
+      1. $NEUROX_MODELS_DIR
+      2. <install>/models/ocr
+      3. <project_root>/models/ocr
+    Missing files are simply skipped (RapidOCR falls back to its bundled ones).
+    """
+    candidates = []
+    env = os.getenv("NEUROX_MODELS_DIR")
+    if env:
+        candidates.append(Path(env))
+    candidates.append(BACKEND_DIR.parent / "models" / "ocr")
+    candidates.append(PROJECT_ROOT / "models" / "ocr")
+
+    kwargs = {}
+    for base in candidates:
+        if not base.exists():
+            continue
+        det = base / "det.onnx"
+        rec = base / "rec.onnx"
+        cls = base / "cls.onnx"
+        if det.exists():
+            kwargs.setdefault("det_model_path", str(det))
+        if rec.exists():
+            kwargs.setdefault("rec_model_path", str(rec))
+        if cls.exists():
+            kwargs.setdefault("cls_model_path", str(cls))
+        if kwargs:
+            logger.info(f"Using custom OCR models from: {base} ({list(kwargs.keys())})")
+            break
+    if not kwargs:
+        logger.info("Using bundled RapidOCR models (shipped inside wheel)")
+    return kwargs
+
 
 def initialize_ocr():
     global ocr_engine
     if ocr_engine is None:
         try:
-            from paddleocr import PaddleOCR
-            ocr_engine = PaddleOCR(
-                use_angle_cls=True,
-                lang='fr',
-                use_gpu=False,
-                show_log=False
-            )
-            logger.info("✅ PaddleOCR initialized successfully")
+            logger.info(f"Initializing RapidOCR (platform={platform.processor() or sys.platform})")
+            from rapidocr_onnxruntime import RapidOCR
+            ocr_engine = RapidOCR(**_resolve_model_paths())
+            logger.info("✅ RapidOCR (ONNX Runtime) initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize PaddleOCR: {e}")
+            import traceback
+            logger.error(f"Failed to initialize RapidOCR: {e}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
             raise
     return ocr_engine
 
@@ -163,8 +298,8 @@ async def lifespan(app: FastAPI):
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="FSE OCR API",
-    description="OCR API for French medical prescription processing using PaddleOCR",
-    version="2.0.0",
+    description="OCR API for French medical prescription processing using RapidOCR (ONNX Runtime)",
+    version="2.1.0",
     lifespan=lifespan
 )
 
@@ -189,7 +324,12 @@ app.mount("/static", StaticFiles(directory=temp_dir), name="static")
 
 # ── OCR helpers ───────────────────────────────────────────────────────────────
 def run_ocr_on_file(file_path: str, file_ext: str, unique_id: str):
-    """Run PaddleOCR and return (lines, text, results_with_conf, image_path)"""
+    """Run RapidOCR and return (lines, text, results_with_conf, image_path).
+
+    RapidOCR returns (result, elapse) where result is either None or a list of
+    ``[box, text, confidence]`` entries. We normalise to the same dict shape
+    that downstream code (ocr_to_schema, ocr_filter) expects.
+    """
     image_path = None
 
     if file_ext == '.pdf':
@@ -201,19 +341,24 @@ def run_ocr_on_file(file_path: str, file_ext: str, unique_id: str):
     else:
         ocr_input = file_path
 
-    result = ocr_engine.ocr(ocr_input, cls=True)
+    result, _elapse = ocr_engine(ocr_input)
 
     ocr_text_lines = []
     ocr_results_with_conf = []
 
-    if result and result[0]:
-        for line in result[0]:
-            if line and len(line) >= 2:
-                text = line[1][0]
-                confidence = line[1][1]
-                if confidence > 0.5:
-                    ocr_text_lines.append(text)
-                    ocr_results_with_conf.append({"text": text, "confidence": float(confidence)})
+    if result:
+        for line in result:
+            # RapidOCR format: [box, text, confidence]
+            if not line or len(line) < 3:
+                continue
+            text = line[1]
+            try:
+                confidence = float(line[2])
+            except (TypeError, ValueError):
+                continue
+            if confidence > 0.5:
+                ocr_text_lines.append(text)
+                ocr_results_with_conf.append({"text": text, "confidence": confidence})
 
     ocr_text = "\n".join(ocr_text_lines)
     return ocr_text_lines, ocr_text, ocr_results_with_conf, image_path
@@ -238,8 +383,8 @@ def extract_schema_from_ocr(ocr_results_with_conf: list, ocr_text: str) -> dict:
 async def root():
     return {
         "message": "FSE OCR API is running",
-        "version": "2.0.0",
-        "ocr_engine": "PaddleOCR",
+        "version": "2.1.0",
+        "ocr_engine": "RapidOCR-ONNXRuntime",
         "center_finess": CENTER_FINESS,
         "center_city": CENTER_CITY,
     }
@@ -266,7 +411,7 @@ async def parse_document(file: UploadFile = File(...)):
 
         image_path = None
         try:
-            logger.info(f"Running PaddleOCR on {file.filename}")
+            logger.info(f"Running RapidOCR on {file.filename}")
             ocr_text_lines, ocr_text, ocr_results_with_conf, image_path = run_ocr_on_file(
                 temp_path, file_ext, unique_id
             )
@@ -570,6 +715,365 @@ async def process_zip(
             message=f"Erreur: {str(e)}",
             error=str(e)
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ASYNC PROCESSING: single file with progress tracking
+# ─────────────────────────────────────────────────────────────────────────────
+async def process_file_background(
+    job_id: str,
+    file_content: bytes,
+    filename: str,
+    finess: str,
+    city: str,
+    edm_base_path: str,
+) -> None:
+    """Background task: OCR + extract + generate PDF for a single image/PDF."""
+    start_total = time.perf_counter()
+    try:
+        update_job_progress(job_id, 5, "Initialisation...")
+        file_ext = Path(filename).suffix.lower()
+        if file_ext not in {".pdf", ".jpg", ".jpeg", ".png"}:
+            update_job_progress(
+                job_id, 100, "Format non supporté",
+                {"error": f"Format non supporté: {file_ext}"},
+            )
+            return
+
+        with tempfile.TemporaryDirectory(prefix=f"file_{job_id}_") as tmpdir:
+            temp_path = os.path.join(tmpdir, f"upload{file_ext}")
+            with open(temp_path, "wb") as f:
+                f.write(file_content)
+
+            if not ocr_engine:
+                update_job_progress(job_id, 100, "OCR indisponible", {"error": "OCR engine not initialized"})
+                return
+
+            update_job_progress(job_id, 10, "OCR en cours...")
+            ocr_text_lines, ocr_text, ocr_results_with_conf, _image_path = run_ocr_on_file(
+                temp_path, file_ext, str(job_id),
+            )
+            update_job_progress(job_id, 70, f"OCR terminé ({len(ocr_text_lines)} lignes)")
+
+            extraction_data = extract_schema_from_ocr(ocr_results_with_conf, ocr_text)
+            center_info = get_center_info()
+
+            from fill_template import fill_and_convert_to_pdf
+            template_path = os.path.join(
+                str(BACKEND_DIR), "templates", "prescription",
+                "Ordonnance_Template vierge.docx",
+            )
+            if not os.path.exists(template_path):
+                update_job_progress(
+                    job_id, 100, "Template non trouvé",
+                    {"error": f"Template not found: {template_path}"},
+                )
+                return
+
+            fse_number = str(extraction_data.get("fse_number") or str(uuid.uuid4())[:8])
+            ipp = str(
+                extraction_data.get("patient", {}).get("ipp")
+                or extraction_data.get("ipp")
+                or fse_number
+            )
+            ipp = re.sub(r"\D", "", ipp) or "0"
+
+            edm_dir = get_edm_dir(ipp, edm_base_path)
+            os.makedirs(edm_dir, exist_ok=True)
+            os.makedirs(os.path.join(edm_dir, "thumbnails"), exist_ok=True)
+
+            pdf_filename = f"Ordonnance_{finess}_{fse_number}.pdf"
+            jpg_filename = f"Ordonnance_{finess}_{fse_number}.jpg"
+            pdf_output = os.path.join(edm_dir, pdf_filename)
+            thumbnail_path = os.path.join(edm_dir, "thumbnails", jpg_filename)
+
+            update_job_progress(job_id, 85, "Génération du PDF...")
+
+            def _generate_pdf_sync() -> str:
+                return fill_and_convert_to_pdf(
+                    extraction_data=extraction_data,
+                    output_pdf_path=pdf_output,
+                    center_info=center_info,
+                    finess=finess,
+                    city=city,
+                    template_path=template_path,
+                )
+
+            pdf_path = await asyncio.get_event_loop().run_in_executor(None, _generate_pdf_sync)
+
+            update_job_progress(job_id, 95, "Création du thumbnail...")
+            try:
+                from prescription_generator import create_thumbnail
+                await asyncio.get_event_loop().run_in_executor(
+                    None, create_thumbnail, pdf_path, thumbnail_path,
+                )
+            except Exception as e:
+                logger.warning(f"Thumbnail creation failed: {e}")
+
+            update_info_pdf(edm_dir, pdf_filename, jpg_filename)
+
+            total_time = time.perf_counter() - start_total
+            logger.info(f"Async file job {job_id} completed in {total_time:.2f}s")
+            update_job_progress(
+                job_id, 100, "Terminé",
+                {
+                    "success": True,
+                    "pdf_path": pdf_path,
+                    "thumbnail_path": thumbnail_path,
+                    "edm_path": edm_dir,
+                    "message": "Prescription générée avec succès",
+                    "ocr_text": ocr_text,
+                },
+            )
+    except Exception as e:
+        logger.exception(f"Async file job {job_id} failed")
+        update_job_progress(job_id, 100, "Erreur OCR", {"error": f"OCR non disponible: {str(e)}"})
+
+
+@app.post("/process-file-async")
+async def process_file_async(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    finess: str = CENTER_FINESS,
+    city: str = CENTER_CITY,
+    edm_base_path: str = EDM_BASE_PATH,
+):
+    """Kick off async OCR+PDF generation for a single image/PDF. Returns a job_id to poll."""
+    job_id = str(uuid.uuid4())
+    content = await file.read()
+    update_job_progress(job_id, 0, "Démarrage...")
+    background_tasks.add_task(
+        process_file_background,
+        job_id, content, file.filename, finess, city, edm_base_path,
+    )
+    return {"job_id": job_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ASYNC PROCESSING: ZIP with multi-frame progress
+# ─────────────────────────────────────────────────────────────────────────────
+async def process_zip_background(
+    job_id: str,
+    file_content: bytes,
+    filename: str,
+    finess: str,
+    city: str,
+    edm_base_path: str,
+    max_frames: int,
+) -> None:
+    """Background task: extract ZIP, OCR each frame, combine, then generate one PDF."""
+    start_total = time.perf_counter()
+    try:
+        update_job_progress(job_id, 0, "Extraction du ZIP...")
+        with tempfile.TemporaryDirectory(prefix=f"zip_async_{job_id}_") as tmpdir:
+            zip_path = os.path.join(tmpdir, "upload.zip")
+            with open(zip_path, "wb") as f:
+                f.write(file_content)
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(tmpdir)
+
+            image_extensions = {".jpg", ".jpeg", ".png", ".pdf"}
+            image_paths = []
+            for root, _dirs, files in os.walk(tmpdir):
+                for fname in files:
+                    if os.path.splitext(fname)[1].lower() in image_extensions:
+                        image_paths.append(os.path.join(root, fname))
+
+            if not image_paths:
+                update_job_progress(
+                    job_id, 100, "Aucune image trouvée",
+                    {"error": "No images or PDFs found in ZIP"},
+                )
+                return
+
+            if max_frames > 0 and len(image_paths) > max_frames:
+                image_paths = image_paths[:max_frames]
+            total = len(image_paths)
+
+            if not ocr_engine:
+                update_job_progress(job_id, 100, "OCR indisponible", {"error": "OCR engine not initialized"})
+                return
+
+            update_job_progress(job_id, 5, f"Traitement de {total} fichiers...")
+            all_ocr_results = []
+            for idx, img_path in enumerate(image_paths):
+                unique_id = str(uuid.uuid4())[:8]
+                file_ext = os.path.splitext(img_path)[1].lower()
+                _, _, ocr_results, _ = run_ocr_on_file(img_path, file_ext, unique_id)
+                if ocr_results:
+                    all_ocr_results.extend(ocr_results)
+                progress = 5 + int(85 * (idx + 1) / total)
+                update_job_progress(job_id, progress, f"Traitement frame {idx + 1}/{total}")
+
+            if not all_ocr_results:
+                update_job_progress(
+                    job_id, 100, "Aucun texte OCR détecté",
+                    {"error": "No OCR text detected"},
+                )
+                return
+
+            extraction_data = extract_schema_from_ocr(all_ocr_results, "")
+            fse_number = str(extraction_data.get("fse_number") or str(uuid.uuid4())[:8])
+            ipp = str(
+                extraction_data.get("patient", {}).get("ipp")
+                or extraction_data.get("ipp")
+                or fse_number
+            )
+            ipp = re.sub(r"\D", "", ipp) or "0"
+
+            center_info = get_center_info()
+            from fill_template import fill_and_convert_to_pdf
+            template_path = os.path.join(
+                str(BACKEND_DIR), "templates", "prescription",
+                "Ordonnance_Template vierge.docx",
+            )
+            if not os.path.exists(template_path):
+                update_job_progress(
+                    job_id, 100, "Template non trouvé",
+                    {"error": f"Template not found: {template_path}"},
+                )
+                return
+
+            edm_dir = get_edm_dir(ipp, edm_base_path)
+            os.makedirs(edm_dir, exist_ok=True)
+            os.makedirs(os.path.join(edm_dir, "thumbnails"), exist_ok=True)
+
+            pdf_filename = f"Ordonnance_{finess}_{fse_number}.pdf"
+            jpg_filename = f"Ordonnance_{finess}_{fse_number}.jpg"
+            pdf_output = os.path.join(edm_dir, pdf_filename)
+            thumbnail_path = os.path.join(edm_dir, "thumbnails", jpg_filename)
+
+            update_job_progress(job_id, 92, "Génération du PDF...")
+
+            def _generate_pdf_sync() -> str:
+                return fill_and_convert_to_pdf(
+                    extraction_data=extraction_data,
+                    output_pdf_path=pdf_output,
+                    center_info=center_info,
+                    finess=finess,
+                    city=city,
+                    template_path=template_path,
+                )
+
+            pdf_path = await asyncio.get_event_loop().run_in_executor(None, _generate_pdf_sync)
+
+            update_job_progress(job_id, 96, "Création du thumbnail...")
+            try:
+                from prescription_generator import create_thumbnail
+                await asyncio.get_event_loop().run_in_executor(
+                    None, create_thumbnail, pdf_path, thumbnail_path,
+                )
+            except Exception as e:
+                logger.warning(f"Thumbnail creation failed: {e}")
+
+            update_job_progress(job_id, 98, "Mise à jour infoPdf...")
+            update_info_pdf(edm_dir, pdf_filename, jpg_filename)
+
+            total_time = time.perf_counter() - start_total
+            logger.info(f"Async ZIP job {job_id} completed in {total_time:.2f}s")
+            update_job_progress(
+                job_id, 100, "Terminé",
+                {
+                    "success": True,
+                    "pdf_path": pdf_path,
+                    "thumbnail_path": thumbnail_path,
+                    "edm_path": edm_dir,
+                    "message": f"Prescription générée à partir de {total} frames",
+                },
+            )
+    except Exception as e:
+        logger.exception(f"Async ZIP job {job_id} failed")
+        update_job_progress(job_id, 100, "Erreur OCR", {"error": f"OCR non disponible: {str(e)}"})
+
+
+@app.post("/process-zip-async")
+async def process_zip_async(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    finess: str = CENTER_FINESS,
+    city: str = CENTER_CITY,
+    edm_base_path: str = EDM_BASE_PATH,
+    max_frames: int = 0,
+):
+    """Kick off async ZIP processing. Returns a job_id to poll via /job/{id}/status."""
+    job_id = str(uuid.uuid4())
+    content = await file.read()
+    update_job_progress(job_id, 0, "Démarrage...")
+    background_tasks.add_task(
+        process_zip_background,
+        job_id, content, file.filename, finess, city, edm_base_path, max_frames,
+    )
+    return {"job_id": job_id}
+
+
+@app.get("/job/{job_id}/status")
+async def get_job_status(job_id: str):
+    """Poll async job progress. Returns {progress, message, result, finished, updated_at}."""
+    data = job_store.get(job_id)
+    if not data:
+        return {"error": "Job not found"}
+    return data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# B2 LOOKUP (semi-automatic mode)
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/b2-lookup")
+async def b2_lookup(request: dict):
+    """Look up a B2/FSE number in the internal mapping for the semi-auto flow."""
+    number = str(request.get("number", "")).strip()
+    data = B2_MAPPING.get(number)
+    if data:
+        return {"success": True, **data}
+    return {"success": False, "error": "Numéro non trouvé dans la base interne"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SEND PRESCRIPTION EMAIL
+# ─────────────────────────────────────────────────────────────────────────────
+@app.post("/send-prescription-email")
+async def send_prescription_email(request: dict):
+    """Send a generated prescription PDF as an email attachment via SMTP."""
+    pdf_path = request.get("pdf_path")
+    email_to = request.get("email_to")
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+
+    if not smtp_user or not smtp_password:
+        return {"success": False, "error": "SMTP non configuré (SMTP_USER / SMTP_PASSWORD manquants)"}
+    if not pdf_path or not email_to:
+        return {"success": False, "error": "Paramètres manquants (pdf_path / email_to)"}
+
+    msg = MIMEMultipart()
+    msg["From"] = smtp_user
+    msg["To"] = email_to
+    msg["Subject"] = "Ordonnance orthoptique"
+    msg.attach(MIMEText("Veuillez trouver ci-joint l'ordonnance.", "plain"))
+
+    try:
+        with open(pdf_path, "rb") as attachment:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment.read())
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f"attachment; filename={os.path.basename(pdf_path)}",
+            )
+            msg.attach(part)
+    except Exception as e:
+        return {"success": False, "error": f"Erreur lecture PDF: {e}"}
+
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+        return {"success": True, "message": "Email envoyé avec succès"}
+    except Exception as e:
+        logger.exception(f"send-prescription-email failed for {email_to}")
+        return {"success": False, "error": str(e)}
 
 
 if __name__ == "__main__":

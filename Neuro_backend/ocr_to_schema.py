@@ -7,6 +7,7 @@ Passes birth_date from 'Né(e) le DD/MM/YYYY'.
 import re
 from typing import Dict, Optional, List
 from datetime import datetime
+from loguru import logger
 
 
 def normalize_amy_code(raw: str) -> Optional[str]:
@@ -124,9 +125,15 @@ def extract_from_ocr_results(ocr_results: List[Dict]) -> Dict:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from ocr_filter import filter_frame_ocr
 
-    filtered = filter_frame_ocr(ocr_results)
-    detected = filtered["detected_fields"]
-    raw_text = "\n".join(item["text"] for item in filtered["relevant_texts"])
+    try:
+        filtered = filter_frame_ocr(ocr_results)
+        detected = filtered["detected_fields"]
+        raw_text = "\n".join(item["text"] for item in filtered["relevant_texts"])
+    except Exception as e:
+        # Fallback to empty detection and raw text
+        detected = {}
+        raw_text = "\n".join(item.get("text", "") for item in ocr_results)
+        logger.warning(f"OCR filtering failed: {e}")
 
     return ocr_fields_to_schema(detected, raw_text)
 

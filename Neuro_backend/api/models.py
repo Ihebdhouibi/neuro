@@ -2,9 +2,11 @@
 Database models for the application
 """
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, JSON, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
+
 
 class Document(Base):
     """
@@ -40,6 +42,7 @@ class Document(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
+
 class User(Base):
     """
     Model for user management
@@ -68,6 +71,7 @@ class User(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
 
 class ProcessingJob(Base):
     """
@@ -109,6 +113,7 @@ class ProcessingJob(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
+
 class MedicalList(Base):
     """
     Model for storing medical procedure lists (AMY codes)
@@ -137,3 +142,110 @@ class MedicalList(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
+
+class Center(Base):
+    """Centre d'orthoptie / établissement"""
+    __tablename__ = "centers"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String, unique=True, index=True, nullable=False)
+    finess = Column(String, unique=True, index=True, nullable=False)
+    adresse = Column(String, nullable=False)
+    ville = Column(String, nullable=False)
+    code_postal = Column(String, nullable=False)
+    telephone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    tampon_path = Column(String, nullable=True)
+    signature_path = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Practitioner(Base):
+    """Praticien (prescripteur ou orthoptiste exécutant)"""
+    __tablename__ = "practitioners"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    centre = Column(String, index=True, nullable=False)
+    pcode = Column(String, unique=True, index=True, nullable=False)
+    nom = Column(String, nullable=False)
+    prenom = Column(String, nullable=False)
+    rpps = Column(String, index=True, nullable=True)
+    type = Column(String, default="prescripteur")
+    tarif = Column(Float, default=10.0)
+    code_conventionnel = Column(String, nullable=True)
+    ik = Column(String, nullable=True)
+    parcours = Column(String, nullable=True)
+    histo_dent = Column(String, nullable=True)
+    condition_exercice = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Template(Base):
+    """Template d'ordonnance (PDF)"""
+    __tablename__ = "templates"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    center_id = Column(Integer, ForeignKey("centers.id", ondelete="CASCADE"), nullable=False)
+    nom = Column(String, nullable=False)
+    type = Column(String, nullable=False)  # 'FSE', 'B2', 'manuelle'
+    contenu_html = Column(Text, nullable=True)
+    contenu_path = Column(String, nullable=True)
+    is_default = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relations
+    center = relationship("Center", backref="templates")
+
+
+class Prescription(Base):
+    """Duplicata des ordonnances générées"""
+    __tablename__ = "prescriptions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    ordonnance_id = Column(String, unique=True, index=True, nullable=False)
+    fse_number = Column(String, index=True, nullable=True)
+    ipp_number = Column(String, index=True, nullable=True)
+    
+    # Patient
+    patient_nom = Column(String, nullable=False)
+    patient_prenom = Column(String, nullable=False)
+    patient_nir = Column(String, nullable=True)
+    patient_ipp = Column(String, nullable=True)
+    
+    # Prescripteur
+    prescripteur_pcode = Column(String, ForeignKey("practitioners.pcode"), nullable=True)
+    prescripteur_nom = Column(String, nullable=True)
+    prescripteur_prenom = Column(String, nullable=True)
+    prescripteur_rpps = Column(String, nullable=True)
+    
+    # Acte
+    acte_code = Column(String, ForeignKey("medical_lists.code"), nullable=True)
+    acte_libelle = Column(String, nullable=True)
+    acte_tarif = Column(Float, nullable=True)
+    
+    # Centre
+    center_finess = Column(String, ForeignKey("centers.finess"), nullable=True)
+    center_nom = Column(String, nullable=True)
+    
+    # Métadonnées
+    date_soin = Column(DateTime, nullable=True)
+    date_generation = Column(DateTime, default=datetime.utcnow)
+    pdf_path = Column(String, nullable=True)
+    thumbnail_path = Column(String, nullable=True)
+    status = Column(String, default="generated")
+    error_message = Column(Text, nullable=True)
+    mode_generation = Column(String, nullable=True)  # 'auto_fse', 'auto_b2', 'manuel'
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relations
+    prescripteur = relationship("Practitioner", backref="prescriptions", foreign_keys=[prescripteur_pcode])
+    acte = relationship("MedicalList", backref="prescriptions", foreign_keys=[acte_code])
+    center = relationship("Center", backref="prescriptions", foreign_keys=[center_finess])
