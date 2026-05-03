@@ -33,7 +33,11 @@ _env_path = BACKEND_DIR / ".env"
 if not _env_path.exists():
     _env_path = PROJECT_ROOT / ".env"
 load_dotenv(str(_env_path))
-
+# After loading .env, also load center_config.env
+_center_config = BACKEND_DIR / "center_config.env"
+if _center_config.exists():
+    load_dotenv(str(_center_config))
+    logger.info(f"Loaded center config from: {_center_config}")
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -81,9 +85,13 @@ def get_center_info() -> dict:
 
 CENTER_FINESS  = os.getenv("CENTER_FINESS",  "920036563")
 CENTER_CITY    = os.getenv("CENTER_CITY",    "Nanterre")
-EDM_BASE_PATH  = os.getenv("EDM_BASE_PATH",  "C:/temp/fse_ocr")
+EDM_BASE_PATH  = os.getenv("EDM_BASE_PATH",  "EDM_BASE_PATH")
 GALAXIE_EDM    = os.getenv("GALAXIE_EDM",    "D:/Stimut/Documents_Patients")
-
+# Add validation
+if not EDM_BASE_PATH:
+    logger.warning("EDM_BASE_PATH not set in environment")
+if not GALAXIE_EDM:
+    logger.warning("GALAXIE_EDM not set in environment")
 
 # ── Internal database mock (B2/FSE mapping) ─────────────────────────────────
 # Used by the /b2-lookup endpoint for the semi-automatic prescription flow.
